@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Imóveis em Dia - Full Stack</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="authScreen" class="auth-shell">
+    <div class="auth-card">
+      <h1>Imóveis em Dia</h1>
+      <p class="muted">Versão full stack pronta para teste local.</p>
+      <div class="demo-box">
+        <strong>Login demo</strong><br>
+        E-mail: <code>admin@teste.com</code><br>
+        Senha: <code>123456</code>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="loginTab">Entrar</button>
+        <button class="tab-btn" data-tab="registerTab">Cadastrar</button>
+      </div>
+
+      <form id="loginTab" class="tab-panel stack">
+        <div><label>E-mail</label><input name="email" type="email" value="admin@teste.com" required /></div>
+        <div><label>Senha</label><input name="password" type="password" value="123456" required /></div>
+        <button type="submit">Entrar</button>
+      </form>
+
+      <form id="registerTab" class="tab-panel stack hidden">
+        <div><label>Nome</label><input name="name" required /></div>
+        <div><label>E-mail</label><input name="email" type="email" required /></div>
+        <div><label>Senha</label><input name="password" type="password" minlength="6" required /></div>
+        <button type="submit">Criar conta</button>
+      </form>
+
+      <div id="authMessage" class="message"></div>
+    </div>
+  </div>
+
+  <div id="appShell" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand">Imóveis em Dia <small>Full Stack</small></div>
+      <div class="user-card">
+        <div id="currentUserName">-</div>
+        <div id="currentUserEmail" class="muted small">-</div>
+        <button id="logoutBtn" class="secondary full">Sair</button>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-screen="dashboard">Painel</button>
+        <button class="nav-btn" data-screen="tenants">Inquilinos</button>
+        <button class="nav-btn" data-screen="managers">Administradoras</button>
+        <button class="nav-btn" data-screen="properties">Imóveis</button>
+        <button class="nav-btn" data-screen="configs">Categorias</button>
+        <button class="nav-btn" data-screen="launches">Lançamentos</button>
+        <button class="nav-btn" data-screen="payments">Pagamentos</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section id="dashboard" class="screen">
+        <div class="topbar">
+          <div>
+            <h2>Painel</h2>
+            <p class="muted">Resumo mensal com filtro por administradora.</p>
+          </div>
+          <div class="toolbar">
+            <input type="month" id="dashboardMonth" />
+            <select id="dashboardManagerFilter"></select>
+            <button id="refreshDashboardBtn" class="secondary">Atualizar</button>
+          </div>
+        </div>
+        <div id="dashboardCards" class="grid grid-4"></div>
+        <div class="card"><div id="dashboardTable"></div></div>
+      </section>
+
+      <section id="tenants" class="screen hidden">
+        <div class="topbar"><div><h2>Inquilinos</h2><p class="muted">Cadastro, edição e exclusão.</p></div></div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 id="tenantFormTitle">Novo inquilino</h3>
+            <form id="tenantForm" class="form-grid">
+              <input type="hidden" name="id" />
+              <div class="field col-6"><label>Nome</label><input name="name" required /></div>
+              <div class="field col-3"><label>Telefone</label><input name="phone" /></div>
+              <div class="field col-3"><label>E-mail</label><input name="email" type="email" /></div>
+              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelTenantEdit" class="secondary hidden">Cancelar edição</button></div>
+            </form>
+          </div>
+          <div class="card"><h3>Lista</h3><div id="tenantList"></div></div>
+        </div>
+      </section>
+
+      <section id="managers" class="screen hidden">
+        <div class="topbar"><div><h2>Administradoras</h2><p class="muted">Cadastro, edição e exclusão.</p></div></div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 id="managerFormTitle">Nova administradora</h3>
+            <form id="managerForm" class="form-grid">
+              <input type="hidden" name="id" />
+              <div class="field col-6"><label>Nome</label><input name="name" required /></div>
+              <div class="field col-3"><label>Telefone</label><input name="phone" /></div>
+              <div class="field col-3"><label>E-mail</label><input name="email" type="email" /></div>
+              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelManagerEdit" class="secondary hidden">Cancelar edição</button></div>
+            </form>
+          </div>
+          <div class="card"><h3>Lista</h3><div id="managerList"></div></div>
+        </div>
+      </section>
+
+      <section id="properties" class="screen hidden">
+        <div class="topbar"><div><h2>Imóveis</h2><p class="muted">Vincule imóvel a inquilino e administradora.</p></div></div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 id="propertyFormTitle">Novo imóvel</h3>
+            <form id="propertyForm" class="form-grid">
+              <input type="hidden" name="id" />
+              <div class="field col-6"><label>Nome do imóvel</label><input name="name" required /></div>
+              <div class="field col-6"><label>Endereço</label><input name="address" required /></div>
+              <div class="field col-4"><label>Inquilino</label><select name="tenant_id" id="propertyTenantSelect"></select></div>
+              <div class="field col-4"><label>Administradora</label><select name="manager_id" id="propertyManagerSelect"></select></div>
+              <div class="field col-4"><label>Aluguel base</label><input name="rent_value" type="number" step="0.01" required /></div>
+              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelPropertyEdit" class="secondary hidden">Cancelar edição</button></div>
+            </form>
+          </div>
+          <div class="card"><h3>Lista</h3><div id="propertyList"></div></div>
+        </div>
+      </section>
+
+      <section id="configs" class="screen hidden">
+        <div class="topbar"><div><h2>Categorias de cobrança</h2><p class="muted">Configure Aluguel, Condomínio, IPTU e outras.</p></div></div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 id="configFormTitle">Nova categoria</h3>
+            <form id="configForm" class="form-grid">
+              <input type="hidden" name="id" />
+              <div class="field col-12"><label>Imóvel</label><select name="property_id" id="configPropertySelect" required></select></div>
+              <div class="field col-5"><label>Categoria</label><input name="category_name" required /></div>
+              <div class="field col-3"><label>Valor</label><input name="amount" type="number" step="0.01" required /></div>
+              <div class="field col-2"><label>Vence dia</label><input name="due_day" type="number" min="1" max="31" required /></div>
+              <div class="field col-2"><label>Ativa</label><select name="active"><option value="1">Sim</option><option value="0">Não</option></select></div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelConfigEdit" class="secondary hidden">Cancelar edição</button></div>
+            </form>
+          </div>
+          <div class="card"><h3>Lista</h3><div id="configList"></div></div>
+        </div>
+      </section>
+
+      <section id="launches" class="screen hidden">
+        <div class="topbar">
+          <div><h2>Lançamentos mensais</h2><p class="muted">Gere cobranças por competência e gerencie os registros.</p></div>
+          <div class="toolbar">
+            <input type="month" id="launchMonth" />
+            <button id="generateLaunchesBtn">Gerar lançamentos</button>
+            <button id="refreshLaunchesBtn" class="secondary">Atualizar</button>
+          </div>
+        </div>
+        <div class="card"><div id="launchList"></div></div>
+      </section>
+
+      <section id="payments" class="screen hidden">
+        <div class="topbar"><div><h2>Pagamentos</h2><p class="muted">Baixa com recibo anexado e período de locação pago.</p></div></div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 id="paymentFormTitle">Registrar pagamento</h3>
+            <form id="paymentForm" class="form-grid" enctype="multipart/form-data">
+              <input type="hidden" name="id" />
+              <div class="field col-12"><label>Lançamento</label><select name="launch_id" id="paymentLaunchSelect" required></select></div>
+              <div class="field col-4"><label>Valor previsto</label><input id="paymentExpected" disabled /></div>
+              <div class="field col-4"><label>Data de vencimento</label><input id="paymentDueDate" disabled /></div>
+              <div class="field col-4"><label>Competência</label><input id="paymentCompetence" disabled /></div>
+              <div class="field col-4"><label>Valor recebido</label><input name="received_amount" type="number" step="0.01" required /></div>
+              <div class="field col-4"><label>Data de pagamento</label><input name="payment_date" type="date" required /></div>
+              <div class="field col-4"><label>Meio de pagamento</label><select name="payment_method_id" id="paymentMethodSelect"></select></div>
+              <div class="field col-6"><label>Conta de recebimento</label><select name="receiving_account_id" id="receivingAccountSelect"></select></div>
+              <div class="field col-3"><label>Início do período pago</label><input name="rental_period_start" type="date" /></div>
+              <div class="field col-3"><label>Fim do período pago</label><input name="rental_period_end" type="date" /></div>
+              <div class="field col-6"><label>Recibo da administradora</label><input name="receipt" type="file" accept=".pdf,image/*" /></div>
+              <div class="field col-6"><label>Observações</label><input name="notes" /></div>
+              <div class="field col-12 actions"><button type="submit">Salvar pagamento</button><button type="button" id="cancelPaymentEdit" class="secondary hidden">Cancelar edição</button></div>
+            </form>
+          </div>
+          <div class="card"><h3>Pagamentos cadastrados</h3><div id="paymentList"></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

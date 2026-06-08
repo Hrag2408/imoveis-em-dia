@@ -1,0 +1,36 @@
+databases:
+  - name: imoveis-em-dia-db
+    databaseName: imoveis_em_dia
+    user: imoveis_user
+    plan: free
+
+services:
+  - type: web
+    name: imoveis-em-dia
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGIN
+        value: '*'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: imoveis-em-dia-db
+          property: connectionString
+      - key: UPLOAD_ROOT
+        value: /opt/render/project/src/uploads
+      - key: UPLOAD_DIR
+        value: /opt/render/project/src/uploads/receipts
+    disk:
+      name: recibos
+      mountPath: /opt/render/project/src/uploads
+      sizeGB: 1
