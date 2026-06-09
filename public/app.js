@@ -118,7 +118,7 @@ function renderDashboard(data) {
 }
 
 function renderTenants() {
-  $('#tenantList').innerHTML = cache.tenants.length ? `<div class="list">${cache.tenants.map((t) => `<div class="item"><strong>${t.name}</strong><br><span class="muted small">${t.phone || '-'} ${t.email ? '· ' + t.email : ''}</span>${t.notes ? `<div class="muted small" style="margin-top:8px">${t.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" onclick="editTenant(${t.id})">Editar</button><button class="danger" onclick="deleteTenant(${t.id})">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhum inquilino cadastrado.</div>';
+  $('#tenantList').innerHTML = cache.tenants.length ? `<div class="list">${cache.tenants.map((t) => `<div class="item"><strong>${t.name}</strong><br><span class="muted small">${t.phone || '-'} ${t.email ? '· ' + t.email : ''}</span>${t.notes ? `<div class="muted small" style="margin-top:8px">${t.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" data-action="edit-tenant" data-id="${t.id}">Editar</button><button class="danger" data-action="delete-tenant" data-id="${t.id}">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhum inquilino cadastrado.</div>';
 }
 
 function renderManagers() {
@@ -126,22 +126,22 @@ function renderManagers() {
 }
 
 function renderProperties() {
-  $('#propertyList').innerHTML = cache.properties.length ? `<div class="list">${cache.properties.map((p) => `<div class="item"><strong>${p.name}</strong><br><span class="muted small">${p.address}</span><br><span class="small">Inquilino: ${p.tenant_name || '-'} | Administradora: ${p.manager_name || '-'}</span><div style="margin-top:8px"><span class="chip">Aluguel base ${money(p.rent_value)}</span></div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" onclick="editProperty(${p.id})">Editar</button><button class="danger" onclick="deleteProperty(${p.id})">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhum imóvel cadastrado.</div>';
+  $('#propertyList').innerHTML = cache.properties.length ? `<div class="list">${cache.properties.map((p) => `<div class="item"><strong>${p.name}</strong><br><span class="muted small">${p.address}</span><br><span class="small">Inquilino: ${p.tenant_name || '-'} | Administradora: ${p.manager_name || '-'}</span><div style="margin-top:8px"><span class="chip">Aluguel base ${money(p.rent_value)}</span></div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" data-action="edit-property" data-id="${p.id}">Editar</button><button class="danger" data-action="delete-property" data-id="${p.id}">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhum imóvel cadastrado.</div>';
 }
 
 function renderConfigs() {
-  $('#configList').innerHTML = cache.configs.length ? `<div class="list">${cache.configs.map((c) => `<div class="item"><strong>${c.property_name}</strong><div style="margin-top:8px"><span class="chip">${c.category_name}</span><span class="chip">${money(c.amount)}</span><span class="chip">vence dia ${c.due_day}</span><span class="chip">${c.active ? 'ativa' : 'inativa'}</span></div><div class="mini-actions"><button class="secondary" onclick="editConfig(${c.id})">Editar</button><button class="danger" onclick="deleteConfig(${c.id})">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhuma categoria cadastrada.</div>';
+  $('#configList').innerHTML = cache.configs.length ? `<div class="list">${cache.configs.map((c) => `<div class="item"><strong>${c.property_name}</strong><div style="margin-top:8px"><span class="chip">${c.category_name}</span><span class="chip">${money(c.amount)}</span><span class="chip">vence dia ${c.due_day}</span><span class="chip">${c.active ? 'ativa' : 'inativa'}</span></div><div class="mini-actions"><button class="secondary" data-action="edit-config" data-id="${c.id}">Editar</button><button class="danger" data-action="delete-config" data-id="${c.id}">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhuma categoria cadastrada.</div>';
 }
 
 function renderLaunches() {
-  $('#launchList').innerHTML = cache.launches.length ? `<div class="table-wrap"><table><thead><tr><th>Imóvel</th><th>Categoria</th><th>Competência</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr></thead><tbody>${cache.launches.map((l) => `<tr><td>${l.property_name}</td><td>${l.category_name}</td><td>${monthBR(l.competence)}</td><td>${money(l.amount_expected)}</td><td>${dateBR(l.due_date)}</td><td>${statusTag(statusFromItem(l))}</td><td><div class="mini-actions"><button class="secondary" onclick="editLaunch(${l.id})">Editar</button><button class="danger" onclick="deleteLaunch(${l.id})">Excluir</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nenhum lançamento neste mês.</div>';
+  $('#launchList').innerHTML = cache.launches.length ? `<div class="table-wrap"><table><thead><tr><th>Imóvel</th><th>Categoria</th><th>Competência</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr></thead><tbody>${cache.launches.map((l) => `<tr><td>${l.property_name}</td><td>${l.category_name}</td><td>${monthBR(l.competence)}</td><td>${money(l.amount_expected)}</td><td>${dateBR(l.due_date)}</td><td>${statusTag(statusFromItem(l))}</td><td><div class="mini-actions"><button class="secondary" data-action="edit-launch" data-id="${l.id}">Editar</button><button class="danger" data-action="delete-launch" data-id="${l.id}">Excluir</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nenhum lançamento neste mês.</div>';
 }
 
 function renderPayments() {
   $('#paymentList').innerHTML = cache.payments.length ? `<div class="list">${cache.payments.map((p) => {
     const receipt = p.receipt_file_path ? `<br>Recibo: <a href="${p.receipt_file_path}" target="_blank">${p.receipt_original_name || 'Abrir arquivo'}</a>` : '';
     const period = (p.rental_period_start || p.rental_period_end) ? `<br>Período: <strong>${dateBR(p.rental_period_start)}</strong> até <strong>${dateBR(p.rental_period_end)}</strong>` : '';
-    return `<div class="item"><strong>${p.property_name}</strong><br><span class="chip">${p.category_name}</span><span class="chip">${monthBR(p.competence)}</span><div class="small" style="margin-top:8px">Valor recebido: <strong>${money(p.received_amount)}</strong> | Data: <strong>${dateBR(p.payment_date)}</strong><br>Meio: <strong>${p.payment_method_name || '-'}</strong> | Conta: <strong>${p.receiving_account_name || '-'}</strong>${period}${receipt}</div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" onclick="editPayment(${p.id})">Editar</button><button class="danger" onclick="deletePayment(${p.id})">Excluir</button></div></div>`;
+    return `<div class="item"><strong>${p.property_name}</strong><br><span class="chip">${p.category_name}</span><span class="chip">${monthBR(p.competence)}</span><div class="small" style="margin-top:8px">Valor recebido: <strong>${money(p.received_amount)}</strong> | Data: <strong>${dateBR(p.payment_date)}</strong><br>Meio: <strong>${p.payment_method_name || '-'}</strong> | Conta: <strong>${p.receiving_account_name || '-'}</strong>${period}${receipt}</div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" data-action="edit-payment" data-id="${p.id}">Editar</button><button class="danger" data-action="delete-payment" data-id="${p.id}">Excluir</button></div></div>`;
   }).join('')}</div>` : '<div class="empty">Nenhum pagamento cadastrado.</div>';
 }
 
@@ -299,19 +299,6 @@ $('#cancelManagerEdit').addEventListener('click', () => resetForm('#managerForm'
 window.editManager = (id) => { const item = cache.managers.find((x) => x.id === id); fillForm('#managerForm', item); $('#managerFormTitle').textContent = 'Editar administradora'; $('#cancelManagerEdit').classList.remove('hidden'); switchScreen('managers'); };
 window.deleteManager = async (id) => { if (!confirm('Excluir esta administradora?')) return; await api(`/api/managers/${id}`, { method: 'DELETE' }); await refreshAll(); };
 
-document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('#managerList button[data-action]');
-  if (!btn) return;
-  const id = Number(btn.dataset.id || 0);
-  if (!id) return;
-  if (btn.dataset.action === 'edit-manager') {
-    window.editManager(id);
-    return;
-  }
-  if (btn.dataset.action === 'delete-manager') {
-    await window.deleteManager(id);
-  }
-});
 
 $('#propertyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -406,6 +393,26 @@ window.editPayment = (id) => {
   switchScreen('payments');
 };
 window.deletePayment = async (id) => { if (!confirm('Excluir este pagamento?')) return; await api(`/api/payments/${id}`, { method: 'DELETE' }); await refreshAll(); };
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action][data-id]');
+  if (!btn) return;
+  const id = Number(btn.dataset.id || 0);
+  if (!id) return;
+  const action = btn.dataset.action;
+  if (action === 'edit-tenant') return window.editTenant(id);
+  if (action === 'delete-tenant') return window.deleteTenant(id);
+  if (action === 'edit-manager') return window.editManager(id);
+  if (action === 'delete-manager') return window.deleteManager(id);
+  if (action === 'edit-property') return window.editProperty(id);
+  if (action === 'delete-property') return window.deleteProperty(id);
+  if (action === 'edit-config') return window.editConfig(id);
+  if (action === 'delete-config') return window.deleteConfig(id);
+  if (action === 'edit-launch') return window.editLaunch(id);
+  if (action === 'delete-launch') return window.deleteLaunch(id);
+  if (action === 'edit-payment') return window.editPayment(id);
+  if (action === 'delete-payment') return window.deletePayment(id);
+});
 
 fillMonthDefaults();
 bootFromSession();
