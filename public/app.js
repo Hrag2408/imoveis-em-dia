@@ -122,7 +122,7 @@ function renderTenants() {
 }
 
 function renderManagers() {
-  $('#managerList').innerHTML = cache.managers.length ? `<div class="list">${cache.managers.map((m) => `<div class="item"><strong>${m.name}</strong><br><span class="muted small">${m.phone || '-'} ${m.email ? '· ' + m.email : ''}</span>${m.notes ? `<div class="muted small" style="margin-top:8px">${m.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" onclick="editManager(${m.id})">Editar</button><button class="danger" onclick="deleteManager(${m.id})">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhuma administradora cadastrada.</div>';
+  $('#managerList').innerHTML = cache.managers.length ? `<div class="list">${cache.managers.map((m) => `<div class="item"><strong>${m.name}</strong><br><span class="muted small">${m.phone || '-'} ${m.email ? '· ' + m.email : ''}</span>${m.notes ? `<div class="muted small" style="margin-top:8px">${m.notes}</div>` : ''}<div class="mini-actions"><button class="secondary" data-action="edit-manager" data-id="${m.id}">Editar</button><button class="danger" data-action="delete-manager" data-id="${m.id}">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhuma administradora cadastrada.</div>';
 }
 
 function renderProperties() {
@@ -298,6 +298,20 @@ $('#managerForm').addEventListener('submit', async (e) => {
 $('#cancelManagerEdit').addEventListener('click', () => resetForm('#managerForm', '#managerFormTitle', 'Nova administradora', '#cancelManagerEdit'));
 window.editManager = (id) => { const item = cache.managers.find((x) => x.id === id); fillForm('#managerForm', item); $('#managerFormTitle').textContent = 'Editar administradora'; $('#cancelManagerEdit').classList.remove('hidden'); switchScreen('managers'); };
 window.deleteManager = async (id) => { if (!confirm('Excluir esta administradora?')) return; await api(`/api/managers/${id}`, { method: 'DELETE' }); await refreshAll(); };
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('#managerList button[data-action]');
+  if (!btn) return;
+  const id = Number(btn.dataset.id || 0);
+  if (!id) return;
+  if (btn.dataset.action === 'edit-manager') {
+    window.editManager(id);
+    return;
+  }
+  if (btn.dataset.action === 'delete-manager') {
+    await window.deleteManager(id);
+  }
+});
 
 $('#propertyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
