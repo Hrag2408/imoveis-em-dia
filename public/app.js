@@ -153,6 +153,7 @@ function resetForm(formId, titleId, titleText, cancelId) {
 }
 
 function fillForm(formId, data) {
+  if (!data) return;
   Object.entries(data).forEach(([key, value]) => {
     const input = $(`${formId} [name="${key}"]`);
     if (input) input.value = value ?? '';
@@ -199,7 +200,7 @@ async function refreshAll() {
 
 function currentLaunchBySelect() {
   const id = Number($('#paymentLaunchSelect').value || 0);
-  return cache.launches.find((l) => l.id === id) || null;
+  return cache.launches.find((l) => Number(l.id) === Number(id)) || null;
 }
 
 function updatePaymentLaunchInfo() {
@@ -282,7 +283,7 @@ $('#tenantForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 $('#cancelTenantEdit').addEventListener('click', () => resetForm('#tenantForm', '#tenantFormTitle', 'Novo inquilino', '#cancelTenantEdit'));
-window.editTenant = (id) => { const item = cache.tenants.find((x) => x.id === id); fillForm('#tenantForm', item); $('#tenantFormTitle').textContent = 'Editar inquilino'; $('#cancelTenantEdit').classList.remove('hidden'); switchScreen('tenants'); };
+window.editTenant = (id) => { const item = cache.tenants.find((x) => Number(x.id) === Number(id)); fillForm('#tenantForm', item); $('#tenantFormTitle').textContent = 'Editar inquilino'; $('#cancelTenantEdit').classList.remove('hidden'); switchScreen('tenants'); };
 window.deleteTenant = async (id) => { if (!confirm('Excluir este inquilino?')) return; await api(`/api/tenants/${id}`, { method: 'DELETE' }); await refreshAll(); };
 
 $('#managerForm').addEventListener('submit', async (e) => {
@@ -296,7 +297,7 @@ $('#managerForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 $('#cancelManagerEdit').addEventListener('click', () => resetForm('#managerForm', '#managerFormTitle', 'Nova administradora', '#cancelManagerEdit'));
-window.editManager = (id) => { const item = cache.managers.find((x) => x.id === id); fillForm('#managerForm', item); $('#managerFormTitle').textContent = 'Editar administradora'; $('#cancelManagerEdit').classList.remove('hidden'); switchScreen('managers'); };
+window.editManager = (id) => { const item = cache.managers.find((x) => Number(x.id) === Number(id)); fillForm('#managerForm', item); $('#managerFormTitle').textContent = 'Editar administradora'; $('#cancelManagerEdit').classList.remove('hidden'); switchScreen('managers'); };
 window.deleteManager = async (id) => { if (!confirm('Excluir esta administradora?')) return; await api(`/api/managers/${id}`, { method: 'DELETE' }); await refreshAll(); };
 
 
@@ -314,7 +315,7 @@ $('#propertyForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 $('#cancelPropertyEdit').addEventListener('click', () => resetForm('#propertyForm', '#propertyFormTitle', 'Novo imóvel', '#cancelPropertyEdit'));
-window.editProperty = (id) => { const item = cache.properties.find((x) => x.id === id); fillForm('#propertyForm', item); $('#propertyFormTitle').textContent = 'Editar imóvel'; $('#cancelPropertyEdit').classList.remove('hidden'); switchScreen('properties'); };
+window.editProperty = (id) => { const item = cache.properties.find((x) => Number(x.id) === Number(id)); fillForm('#propertyForm', item); $('#propertyFormTitle').textContent = 'Editar imóvel'; $('#cancelPropertyEdit').classList.remove('hidden'); switchScreen('properties'); };
 window.deleteProperty = async (id) => { if (!confirm('Excluir este imóvel e seus vínculos?')) return; await api(`/api/properties/${id}`, { method: 'DELETE' }); await refreshAll(); };
 
 $('#configForm').addEventListener('submit', async (e) => {
@@ -331,7 +332,7 @@ $('#configForm').addEventListener('submit', async (e) => {
   } catch (err) { alert(err.message); }
 });
 $('#cancelConfigEdit').addEventListener('click', () => resetForm('#configForm', '#configFormTitle', 'Nova categoria', '#cancelConfigEdit'));
-window.editConfig = (id) => { const item = cache.configs.find((x) => x.id === id); fillForm('#configForm', item); $('#configFormTitle').textContent = 'Editar categoria'; $('#cancelConfigEdit').classList.remove('hidden'); switchScreen('configs'); };
+window.editConfig = (id) => { const item = cache.configs.find((x) => Number(x.id) === Number(id)); fillForm('#configForm', item); $('#configFormTitle').textContent = 'Editar categoria'; $('#cancelConfigEdit').classList.remove('hidden'); switchScreen('configs'); };
 window.deleteConfig = async (id) => { if (!confirm('Excluir esta categoria?')) return; await api(`/api/category-configs/${id}`, { method: 'DELETE' }); await refreshAll(); };
 
 $('#generateLaunchesBtn').addEventListener('click', async () => {
@@ -341,7 +342,7 @@ $('#generateLaunchesBtn').addEventListener('click', async () => {
   } catch (err) { alert(err.message); }
 });
 window.editLaunch = async (id) => {
-  const item = cache.launches.find((x) => x.id === id);
+  const item = cache.launches.find((x) => Number(x.id) === Number(id));
   if (!item) return;
   const amount = prompt('Novo valor do lançamento:', item.amount_expected);
   if (amount === null) return;
@@ -381,12 +382,12 @@ $('#paymentForm').addEventListener('submit', async (e) => {
 });
 $('#cancelPaymentEdit').addEventListener('click', () => { resetForm('#paymentForm', '#paymentFormTitle', 'Registrar pagamento', '#cancelPaymentEdit'); $('#paymentExpected').value = ''; $('#paymentDueDate').value = ''; $('#paymentCompetence').value = ''; });
 window.editPayment = (id) => {
-  const item = cache.payments.find((x) => x.id === id);
+  const item = cache.payments.find((x) => Number(x.id) === Number(id));
   if (!item) return;
   fillForm('#paymentForm', item);
   $('#paymentFormTitle').textContent = 'Editar pagamento';
   $('#cancelPaymentEdit').classList.remove('hidden');
-  const launch = cache.launches.find((l) => l.id === item.launch_id);
+  const launch = cache.launches.find((l) => Number(l.id) === Number(item.launch_id));
   $('#paymentExpected').value = launch ? money(launch.amount_expected) : '';
   $('#paymentDueDate').value = launch ? dateBR(launch.due_date) : '';
   $('#paymentCompetence').value = launch ? monthBR(launch.competence) : '';
