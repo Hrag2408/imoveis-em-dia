@@ -186,6 +186,26 @@
               <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
               <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelPaymentEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee;">
+              <h3 style="margin-bottom: 12px;">Cadastros rápidos</h3>
+              <div class="form-grid">
+                <div class="field col-6">
+                  <label>Novo meio de pagamento</label>
+                  <div style="display:flex; gap:8px;">
+                    <input id="newPaymentMethodName" type="text" placeholder="Ex.: PIX" />
+                    <button type="button" id="addPaymentMethodBtn" class="secondary">Adicionar</button>
+                  </div>
+                </div>
+                <div class="field col-6">
+                  <label>Nova conta de recebimento</label>
+                  <div style="display:flex; gap:8px;">
+                    <input id="newReceivingAccountName" type="text" placeholder="Ex.: Conta Banco Inter" />
+                    <button type="button" id="addReceivingAccountBtn" class="secondary">Adicionar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="card">
