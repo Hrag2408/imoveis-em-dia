@@ -3,10 +3,47 @@ const USER_KEY = 'imoveisFullstackUser';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const money = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
-const dateBR = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '-';
+
+function toDateSafe(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const d = new Date(`${raw}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [dd, mm, yyyy] = raw.split('/');
+    const d = new Date(`${yyyy}-${mm}-${dd}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const dateBR = (value) => {
+  const d = toDateSafe(value);
+  return d ? d.toLocaleDateString('pt-BR') : '-';
+};
+
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 const currentDate = () => new Date().toISOString().slice(0, 10);
-const monthBR = (ym) => { const [y, m] = ym.split('-'); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); };
+const monthBR = (ym) => {
+  const raw = String(ym || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(raw)) return raw || '-';
+  const [y, m] = raw.split('-');
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+};
 
 function calcAdminFeeValues(receivedAmount, adminFeePercent) {
   const received = Number(receivedAmount || 0);
@@ -25,9 +62,7 @@ function normalizeText(value) {
 }
 
 function uniqueSorted(values) {
-  return [...new Set(values.filter(Boolean))].sort((a, b) =>
-    String(a).localeCompare(String(b), 'pt-BR')
-  );
+  return [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
 }
 
 let cache = { tenants: [], managers: [], properties: [], configs: [], launches: [], payments: [], methods: [], accounts: [] };
@@ -362,11 +397,41 @@ function updatePaymentLaunchInfo() {
   if (launch && !$('#paymentForm [name="id"]').value) {
     $('#paymentForm [name="received_amount"]').value = launch.amount_expected;
     $('#paymentForm [name="payment_date"]').value = currentDate();
-    $('#paymentForm [name="rental_period_start"]').value = `${launch.competence}-01`;
-    $('#paymentForm [name="rental_period_end"]').value = launch.due_date;
+    $('#paymentForm [name="rental_period_start"]').value = /^\d{4}-\d{2}-\d{2}$/.test(String(launch.competence || '')) ? `${launch.competence}-01` : '';
+    $('#paymentForm [name="rental_period_end"]').value = /^\d{4}-\d{2}-\d{2}/.test(String(launch.due_date || '')) ? String(launch.due_date).slice(0, 10) : '';
   }
 
   updatePaymentFeePreview();
+}
+
+async function createPaymentMethod() {
+  const input = $('#newPaymentMethodName');
+  const name = input?.value?.trim();
+  if (!name) return alert('Informe o nome do meio de pagamento.');
+  try {
+    const created = await api('/api/payment-methods', { method: 'POST', body: JSON.stringify({ name }) });
+    input.value = '';
+    await loadLists();
+    if ($('#paymentMethodSelect')) $('#paymentMethodSelect').value = String(created.id);
+    renderPayments();
+  } catch (err) {
+    alert(err.message || 'Erro ao cadastrar meio de pagamento.');
+  }
+}
+
+async function createReceivingAccount() {
+  const input = $('#newReceivingAccountName');
+  const name = input?.value?.trim();
+  if (!name) return alert('Informe o nome da conta de recebimento.');
+  try {
+    const created = await api('/api/receiving-accounts', { method: 'POST', body: JSON.stringify({ name }) });
+    input.value = '';
+    await loadLists();
+    if ($('#receivingAccountSelect')) $('#receivingAccountSelect').value = String(created.id);
+    renderPayments();
+  } catch (err) {
+    alert(err.message || 'Erro ao cadastrar conta de recebimento.');
+  }
 }
 
 async function bootFromSession() {
@@ -430,13 +495,11 @@ $('#paymentLaunchSelect').addEventListener('change', () => {
   updatePaymentFeePreview();
 });
 $('#paymentForm [name="received_amount"]').addEventListener('input', updatePaymentFeePreview);
-
 $('#paymentSearch')?.addEventListener('input', renderPayments);
 $('#paymentCompetenceFilter')?.addEventListener('change', renderPayments);
 $('#paymentCategoryFilter')?.addEventListener('change', renderPayments);
 $('#paymentAccountFilter')?.addEventListener('change', renderPayments);
 $('#paymentMethodFilter')?.addEventListener('change', renderPayments);
-
 $('#paymentClearFilters')?.addEventListener('click', () => {
   if ($('#paymentSearch')) $('#paymentSearch').value = '';
   if ($('#paymentCompetenceFilter')) $('#paymentCompetenceFilter').value = '';
@@ -444,6 +507,14 @@ $('#paymentClearFilters')?.addEventListener('click', () => {
   if ($('#paymentAccountFilter')) $('#paymentAccountFilter').value = '';
   if ($('#paymentMethodFilter')) $('#paymentMethodFilter').value = '';
   renderPayments();
+});
+$('#addPaymentMethodBtn')?.addEventListener('click', createPaymentMethod);
+$('#addReceivingAccountBtn')?.addEventListener('click', createReceivingAccount);
+$('#newPaymentMethodName')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); createPaymentMethod(); }
+});
+$('#newReceivingAccountName')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); createReceivingAccount(); }
 });
 
 $('#tenantForm').addEventListener('submit', async (e) => {
@@ -520,7 +591,7 @@ window.editLaunch = async (id) => {
   if (!item) return;
   const amount = prompt('Novo valor do lançamento:', item.amount_expected);
   if (amount === null) return;
-  const due = prompt('Nova data de vencimento (AAAA-MM-DD):', item.due_date);
+  const due = prompt('Nova data de vencimento (AAAA-MM-DD):', String(item.due_date || '').slice(0, 10));
   if (due === null) return;
   await api(`/api/launches/${id}`, { method: 'PUT', body: JSON.stringify({ amount_expected: Number(amount), due_date: due, category_name: item.category_name, notes: item.notes || null }) });
   await refreshAll();
