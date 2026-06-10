@@ -8,6 +8,14 @@ const currentMonth = () => new Date().toISOString().slice(0, 7);
 const currentDate = () => new Date().toISOString().slice(0, 10);
 const monthBR = (ym) => { const [y, m] = ym.split('-'); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); };
 
+function calcAdminFeeValues(receivedAmount, adminFeePercent) {
+  const received = Number(receivedAmount || 0);
+  const percent = Number(adminFeePercent || 0);
+  const feeAmount = Number(((received * percent) / 100).toFixed(2));
+  const netReceived = Number((received - feeAmount).toFixed(2));
+  return { percent, feeAmount, netReceived };
+}
+
 let cache = { tenants: [], managers: [], properties: [], configs: [], launches: [], payments: [], methods: [], accounts: [] };
 
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
@@ -39,14 +47,18 @@ function showApp(show) {
 }
 
 function switchScreen(id) {
+
   $$('.screen').forEach((el) => el.classList.add('hidden'));
   $('#' + id).classList.remove('hidden');
+
   $$('.nav-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.screen === id));
 }
 
 function switchTab(id) {
+
   $$('.tab-panel').forEach((el) => el.classList.add('hidden'));
   $('#' + id).classList.remove('hidden');
+
   $$('.tab-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === id));
 }
 
@@ -130,7 +142,7 @@ function renderProperties() {
 }
 
 function renderConfigs() {
-  $('#configList').innerHTML = cache.configs.length ? `<div class="list">${cache.configs.map((c) => `<div class="item"><strong>${c.property_name}</strong><div style="margin-top:8px"><span class="chip">${c.category_name}</span><span class="chip">${money(c.amount)}</span><span class="chip">vence dia ${c.due_day}</span><span class="chip">${c.active ? 'ativa' : 'inativa'}</span></div><div class="mini-actions"><button type="button" class="secondary" data-action="edit-config" data-id="${c.id}">Editar</button><button type="button" class="danger" data-action="delete-config" data-id="${c.id}">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhuma categoria cadastrada.</div>';
+  $('#configList').innerHTML = cache.configs.length ? `<div class="list">${cache.configs.map((c) => `<div class="item"><strong>${c.property_name}</strong><div style="margin-top:8px"><span class="chip">${c.category_name}</span><span class="chip">${money(c.amount)}</span><span class="chip">taxa adm ${Number(c.admin_fee_percent || 0).toFixed(2)}%</span><span class="chip">vence dia ${c.due_day}</span><span class="chip">${c.active ? 'ativa' : 'inativa'}</span></div><div class="mini-actions"><button type="button" class="secondary" data-action="edit-config" data-id="${c.id}">Editar</button><button type="button" class="danger" data-action="delete-config" data-id="${c.id}">Excluir</button></div></div>`).join('')}</div>` : '<div class="empty">Nenhuma categoria cadastrada.</div>';
 }
 
 function renderLaunches() {
@@ -141,7 +153,7 @@ function renderPayments() {
   $('#paymentList').innerHTML = cache.payments.length ? `<div class="list">${cache.payments.map((p) => {
     const receipt = p.receipt_file_path ? `<br>Recibo: <a href="${p.receipt_file_path}" target="_blank">${p.receipt_original_name || 'Abrir arquivo'}</a>` : '';
     const period = (p.rental_period_start || p.rental_period_end) ? `<br>Período: <strong>${dateBR(p.rental_period_start)}</strong> até <strong>${dateBR(p.rental_period_end)}</strong>` : '';
-    return `<div class="item"><strong>${p.property_name}</strong><br><span class="chip">${p.category_name}</span><span class="chip">${monthBR(p.competence)}</span><div class="small" style="margin-top:8px">Valor recebido: <strong>${money(p.received_amount)}</strong> | Data: <strong>${dateBR(p.payment_date)}</strong><br>Meio: <strong>${p.payment_method_name || '-'}</strong> | Conta: <strong>${p.receiving_account_name || '-'}</strong>${period}${receipt}</div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button type="button" class="secondary" data-action="edit-payment" data-id="${p.id}">Editar</button><button type="button" class="danger" data-action="delete-payment" data-id="${p.id}">Excluir</button></div></div>`;
+    return `<div class="item"><strong>${p.property_name}</strong><br><span class="chip">${p.category_name}</span><span class="chip">${monthBR(p.competence)}</span><div class="small" style="margin-top:8px">Valor recebido: <strong>${money(p.received_amount)}</strong><br>Taxa administradora: <strong>${money(p.admin_fee_amount)}</strong> (${Number(p.admin_fee_percent || 0).toFixed(2)}%)<br>Recebimento líquido: <strong>${money(p.net_received_amount)}</strong><br>Data: <strong>${dateBR(p.payment_date)}</strong><br>Meio: <strong>${p.payment_method_name || '-'}</strong> | Conta: <strong>${p.receiving_account_name || '-'}</strong>${period}${receipt}</div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button type="button" class="secondary" data-action="edit-payment" data-id="${p.id}">Editar</button><button type="button" class="danger" data-action="delete-payment" data-id="${p.id}">Excluir</button></div></div>`;
   }).join('')}</div>` : '<div class="empty">Nenhum pagamento cadastrado.</div>';
 }
 
@@ -203,17 +215,31 @@ function currentLaunchBySelect() {
   return cache.launches.find((l) => Number(l.id) === Number(id)) || null;
 }
 
+function updatePaymentFeePreview() {
+  const launch = currentLaunchBySelect();
+  const received = Number($('#paymentForm [name="received_amount"]')?.value || 0);
+  const percent = Number(launch?.admin_fee_percent || 0);
+  const { feeAmount, netReceived } = calcAdminFeeValues(received, percent);
+
+  $('#paymentAdminFeePercent').value = `${percent.toFixed(2)}%`;
+  $('#paymentAdminFeeAmount').value = money(feeAmount);
+  $('#paymentNetReceived').value = money(netReceived);
+}
+
 function updatePaymentLaunchInfo() {
   const launch = currentLaunchBySelect();
   $('#paymentExpected').value = launch ? money(launch.amount_expected) : '';
   $('#paymentDueDate').value = launch ? dateBR(launch.due_date) : '';
   $('#paymentCompetence').value = launch ? monthBR(launch.competence) : '';
+
   if (launch && !$('#paymentForm [name="id"]').value) {
     $('#paymentForm [name="received_amount"]').value = launch.amount_expected;
     $('#paymentForm [name="payment_date"]').value = currentDate();
     $('#paymentForm [name="rental_period_start"]').value = `${launch.competence}-01`;
     $('#paymentForm [name="rental_period_end"]').value = launch.due_date;
   }
+
+  updatePaymentFeePreview();
 }
 
 async function bootFromSession() {
@@ -263,14 +289,20 @@ $('#logoutBtn').addEventListener('click', () => {
   showApp(false);
 });
 
+
 $$('.tab-btn').forEach((btn) => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
 $$('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchScreen(btn.dataset.screen)));
 $('#dashboardMonth').addEventListener('change', loadDashboard);
 $('#dashboardManagerFilter').addEventListener('change', loadDashboard);
 $('#refreshDashboardBtn').addEventListener('click', loadDashboard);
 $('#launchMonth').addEventListener('change', loadLists);
 $('#refreshLaunchesBtn').addEventListener('click', loadLists);
-$('#paymentLaunchSelect').addEventListener('change', updatePaymentLaunchInfo);
+$('#paymentLaunchSelect').addEventListener('change', () => {
+  updatePaymentLaunchInfo();
+  updatePaymentFeePreview();
+});
+$('#paymentForm [name="received_amount"]').addEventListener('input', updatePaymentFeePreview);
 
 $('#tenantForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -300,7 +332,6 @@ $('#cancelManagerEdit').addEventListener('click', () => resetForm('#managerForm'
 window.editManager = (id) => { const item = cache.managers.find((x) => Number(x.id) === Number(id)); fillForm('#managerForm', item); $('#managerFormTitle').textContent = 'Editar administradora'; $('#cancelManagerEdit').classList.remove('hidden'); switchScreen('managers'); };
 window.deleteManager = async (id) => { if (!confirm('Excluir esta administradora?')) return; await api(`/api/managers/${id}`, { method: 'DELETE' }); await refreshAll(); };
 
-
 $('#propertyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
@@ -324,6 +355,7 @@ $('#configForm').addEventListener('submit', async (e) => {
     const data = Object.fromEntries(new FormData(e.target).entries());
     const id = data.id; delete data.id;
     data.amount = Number(data.amount || 0);
+    data.admin_fee_percent = Number(data.admin_fee_percent || 0);
     data.due_day = Number(data.due_day || 1);
     data.active = Number(data.active || 0);
     await api(id ? `/api/category-configs/${id}` : '/api/category-configs', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
@@ -376,11 +408,24 @@ $('#paymentForm').addEventListener('submit', async (e) => {
       await api(`/api/payments/${payment.id}/receipt`, { method: 'POST', body: receiptFd });
     }
     resetForm('#paymentForm', '#paymentFormTitle', 'Registrar pagamento', '#cancelPaymentEdit');
-    $('#paymentExpected').value = ''; $('#paymentDueDate').value = ''; $('#paymentCompetence').value = '';
+    $('#paymentExpected').value = '';
+    $('#paymentDueDate').value = '';
+    $('#paymentCompetence').value = '';
+    $('#paymentAdminFeePercent').value = '';
+    $('#paymentAdminFeeAmount').value = '';
+    $('#paymentNetReceived').value = '';
     await refreshAll();
   } catch (err) { alert(err.message); }
 });
-$('#cancelPaymentEdit').addEventListener('click', () => { resetForm('#paymentForm', '#paymentFormTitle', 'Registrar pagamento', '#cancelPaymentEdit'); $('#paymentExpected').value = ''; $('#paymentDueDate').value = ''; $('#paymentCompetence').value = ''; });
+$('#cancelPaymentEdit').addEventListener('click', () => {
+  resetForm('#paymentForm', '#paymentFormTitle', 'Registrar pagamento', '#cancelPaymentEdit');
+  $('#paymentExpected').value = '';
+  $('#paymentDueDate').value = '';
+  $('#paymentCompetence').value = '';
+  $('#paymentAdminFeePercent').value = '';
+  $('#paymentAdminFeeAmount').value = '';
+  $('#paymentNetReceived').value = '';
+});
 window.editPayment = (id) => {
   const item = cache.payments.find((x) => Number(x.id) === Number(id));
   if (!item) return;
@@ -391,6 +436,9 @@ window.editPayment = (id) => {
   $('#paymentExpected').value = launch ? money(launch.amount_expected) : '';
   $('#paymentDueDate').value = launch ? dateBR(launch.due_date) : '';
   $('#paymentCompetence').value = launch ? monthBR(launch.competence) : '';
+  $('#paymentAdminFeePercent').value = `${Number(item.admin_fee_percent || launch?.admin_fee_percent || 0).toFixed(2)}%`;
+  $('#paymentAdminFeeAmount').value = money(item.admin_fee_amount || 0);
+  $('#paymentNetReceived').value = money(item.net_received_amount || 0);
   switchScreen('payments');
 };
 window.deletePayment = async (id) => { if (!confirm('Excluir este pagamento?')) return; await api(`/api/payments/${id}`, { method: 'DELETE' }); await refreshAll(); };
