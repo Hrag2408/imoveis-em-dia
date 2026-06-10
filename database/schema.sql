@@ -108,3 +108,17 @@ CREATE INDEX IF NOT EXISTS idx_launches_user_competence ON launches(user_id, com
 CREATE INDEX IF NOT EXISTS idx_launches_property_id ON launches(property_id);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date);
+ALTER TABLE category_configs
+ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE launches
+ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE payments
+ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE payments
+ADD COLUMN IF NOT EXISTS admin_fee_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE payments
+ADD COLUMN IF NOT EXISTS net_received_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
