@@ -16,6 +16,20 @@ function calcAdminFeeValues(receivedAmount, adminFeePercent) {
   return { percent, feeAmount, netReceived };
 }
 
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) =>
+    String(a).localeCompare(String(b), 'pt-BR')
+  );
+}
+
 let cache = { tenants: [], managers: [], properties: [], configs: [], launches: [], payments: [], methods: [], accounts: [] };
 
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
@@ -105,6 +119,75 @@ function renderPaymentSelects() {
   $('#paymentLaunchSelect').innerHTML = launchOpts;
 }
 
+function renderPaymentFilterOptions() {
+  const competenceEl = $('#paymentCompetenceFilter');
+  const categoryEl = $('#paymentCategoryFilter');
+  const accountEl = $('#paymentAccountFilter');
+  const methodEl = $('#paymentMethodFilter');
+
+  if (!competenceEl || !categoryEl || !accountEl || !methodEl) return;
+
+  const current = {
+    competence: competenceEl.value,
+    category: categoryEl.value,
+    account: accountEl.value,
+    method: methodEl.value
+  };
+
+  const competences = [...new Set(cache.payments.map((p) => p.competence).filter(Boolean))].sort();
+  const categories = uniqueSorted(cache.payments.map((p) => p.category_name));
+  const accounts = uniqueSorted(cache.payments.map((p) => p.receiving_account_name));
+  const methods = uniqueSorted(cache.payments.map((p) => p.payment_method_name));
+
+  competenceEl.innerHTML = ['<option value="">Todas</option>']
+    .concat(competences.map((value) => `<option value="${value}">${monthBR(value)}</option>`))
+    .join('');
+
+  categoryEl.innerHTML = ['<option value="">Todas</option>']
+    .concat(categories.map((value) => `<option value="${value}">${value}</option>`))
+    .join('');
+
+  accountEl.innerHTML = ['<option value="">Todas</option>']
+    .concat(accounts.map((value) => `<option value="${value}">${value}</option>`))
+    .join('');
+
+  methodEl.innerHTML = ['<option value="">Todos</option>']
+    .concat(methods.map((value) => `<option value="${value}">${value}</option>`))
+    .join('');
+
+  if ([...competenceEl.options].some((o) => o.value === current.competence)) competenceEl.value = current.competence;
+  if ([...categoryEl.options].some((o) => o.value === current.category)) categoryEl.value = current.category;
+  if ([...accountEl.options].some((o) => o.value === current.account)) accountEl.value = current.account;
+  if ([...methodEl.options].some((o) => o.value === current.method)) methodEl.value = current.method;
+}
+
+function getFilteredPayments() {
+  const search = normalizeText($('#paymentSearch')?.value);
+  const competence = $('#paymentCompetenceFilter')?.value || '';
+  const category = $('#paymentCategoryFilter')?.value || '';
+  const account = $('#paymentAccountFilter')?.value || '';
+  const method = $('#paymentMethodFilter')?.value || '';
+
+  return cache.payments.filter((p) => {
+    const searchableText = normalizeText([
+      p.property_name,
+      p.category_name,
+      p.receipt_original_name,
+      p.notes,
+      p.payment_method_name,
+      p.receiving_account_name
+    ].join(' '));
+
+    if (search && !searchableText.includes(search)) return false;
+    if (competence && p.competence !== competence) return false;
+    if (category && String(p.category_name || '') !== category) return false;
+    if (account && String(p.receiving_account_name || '') !== account) return false;
+    if (method && String(p.payment_method_name || '') !== method) return false;
+
+    return true;
+  });
+}
+
 function renderDashboard(data) {
   $('#dashboardCards').innerHTML = `
     <div class="card"><div class="kpi-title">Previsto</div><div class="kpi-value">${money(data.summary.total_expected)}</div><div class="muted small">${monthBR($('#dashboardMonth').value || currentMonth())}</div></div>
@@ -150,11 +233,54 @@ function renderLaunches() {
 }
 
 function renderPayments() {
-  $('#paymentList').innerHTML = cache.payments.length ? `<div class="list">${cache.payments.map((p) => {
-    const receipt = p.receipt_file_path ? `<br>Recibo: <a href="${p.receipt_file_path}" target="_blank">${p.receipt_original_name || 'Abrir arquivo'}</a>` : '';
-    const period = (p.rental_period_start || p.rental_period_end) ? `<br>Período: <strong>${dateBR(p.rental_period_start)}</strong> até <strong>${dateBR(p.rental_period_end)}</strong>` : '';
-    return `<div class="item"><strong>${p.property_name}</strong><br><span class="chip">${p.category_name}</span><span class="chip">${monthBR(p.competence)}</span><div class="small" style="margin-top:8px">Valor recebido: <strong>${money(p.received_amount)}</strong><br>Taxa administradora: <strong>${money(p.admin_fee_amount)}</strong> (${Number(p.admin_fee_percent || 0).toFixed(2)}%)<br>Recebimento líquido: <strong>${money(p.net_received_amount)}</strong><br>Data: <strong>${dateBR(p.payment_date)}</strong><br>Meio: <strong>${p.payment_method_name || '-'}</strong> | Conta: <strong>${p.receiving_account_name || '-'}</strong>${period}${receipt}</div>${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}<div class="mini-actions"><button type="button" class="secondary" data-action="edit-payment" data-id="${p.id}">Editar</button><button type="button" class="danger" data-action="delete-payment" data-id="${p.id}">Excluir</button></div></div>`;
-  }).join('')}</div>` : '<div class="empty">Nenhum pagamento cadastrado.</div>';
+  if (!cache.payments.length) {
+    $('#paymentList').innerHTML = '<div class="empty">Nenhum pagamento cadastrado.</div>';
+    return;
+  }
+
+  const payments = getFilteredPayments();
+
+  if (!payments.length) {
+    $('#paymentList').innerHTML = '<div class="empty">Nenhum pagamento encontrado com os filtros informados.</div>';
+    return;
+  }
+
+  $('#paymentList').innerHTML = `
+    <div class="muted small" style="margin-bottom:12px">
+      ${payments.length} pagamento(s) encontrado(s)
+    </div>
+    <div class="list">
+      ${payments.map((p) => {
+        const receipt = p.receipt_file_path
+          ? `<br>Recibo: <a href="${p.receipt_file_path}" target="_blank">${p.receipt_original_name || 'Abrir arquivo'}</a>`
+          : '';
+
+        const period = (p.rental_period_start || p.rental_period_end)
+          ? `<br>Período: <strong>${dateBR(p.rental_period_start)}</strong> até <strong>${dateBR(p.rental_period_end)}</strong>`
+          : '';
+
+        return `<div class="item">
+          <strong>${p.property_name}</strong><br>
+          <span class="chip">${p.category_name}</span>
+          <span class="chip">${monthBR(p.competence)}</span>
+          <div class="small" style="margin-top:8px">
+            Valor recebido: <strong>${money(p.received_amount)}</strong><br>
+            Taxa administradora: <strong>${money(p.admin_fee_amount)}</strong> (${Number(p.admin_fee_percent || 0).toFixed(2)}%)<br>
+            Recebimento líquido: <strong>${money(p.net_received_amount)}</strong><br>
+            Data: <strong>${dateBR(p.payment_date)}</strong><br>
+            Meio: <strong>${p.payment_method_name || '-'}</strong> | Conta: <strong>${p.receiving_account_name || '-'}</strong>
+            ${period}
+            ${receipt}
+          </div>
+          ${p.notes ? `<div class="muted small" style="margin-top:8px">${p.notes}</div>` : ''}
+          <div class="mini-actions">
+            <button type="button" class="secondary" data-action="edit-payment" data-id="${p.id}">Editar</button>
+            <button type="button" class="danger" data-action="delete-payment" data-id="${p.id}">Excluir</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
 }
 
 function resetForm(formId, titleId, titleText, cancelId) {
@@ -197,6 +323,7 @@ async function loadLists() {
   renderManagerFilters();
   renderPropertyAndRelationSelects();
   renderPaymentSelects();
+  renderPaymentFilterOptions();
   renderTenants();
   renderManagers();
   renderProperties();
@@ -303,6 +430,21 @@ $('#paymentLaunchSelect').addEventListener('change', () => {
   updatePaymentFeePreview();
 });
 $('#paymentForm [name="received_amount"]').addEventListener('input', updatePaymentFeePreview);
+
+$('#paymentSearch')?.addEventListener('input', renderPayments);
+$('#paymentCompetenceFilter')?.addEventListener('change', renderPayments);
+$('#paymentCategoryFilter')?.addEventListener('change', renderPayments);
+$('#paymentAccountFilter')?.addEventListener('change', renderPayments);
+$('#paymentMethodFilter')?.addEventListener('change', renderPayments);
+
+$('#paymentClearFilters')?.addEventListener('click', () => {
+  if ($('#paymentSearch')) $('#paymentSearch').value = '';
+  if ($('#paymentCompetenceFilter')) $('#paymentCompetenceFilter').value = '';
+  if ($('#paymentCategoryFilter')) $('#paymentCategoryFilter').value = '';
+  if ($('#paymentAccountFilter')) $('#paymentAccountFilter').value = '';
+  if ($('#paymentMethodFilter')) $('#paymentMethodFilter').value = '';
+  renderPayments();
+});
 
 $('#tenantForm').addEventListener('submit', async (e) => {
   e.preventDefault();
