@@ -187,7 +187,51 @@
               <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelPaymentEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
           </div>
-          <div class="card"><h3>Pagamentos cadastrados</h3><div id="paymentList"></div></div>
+
+          <div class="card">
+            <h3>Pagamentos cadastrados</h3>
+
+            <div class="form-grid" style="margin-bottom: 16px;">
+              <div class="field col-12">
+                <label>Busca</label>
+                <input id="paymentSearch" type="text" placeholder="Buscar por imóvel, categoria, recibo ou observações" />
+              </div>
+
+              <div class="field col-3">
+                <label>Competência</label>
+                <select id="paymentCompetenceFilter">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+
+              <div class="field col-3">
+                <label>Categoria</label>
+                <select id="paymentCategoryFilter">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+
+              <div class="field col-3">
+                <label>Conta</label>
+                <select id="paymentAccountFilter">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+
+              <div class="field col-3">
+                <label>Meio de pagamento</label>
+                <select id="paymentMethodFilter">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+
+              <div class="field col-12 actions">
+                <button type="button" id="paymentClearFilters" class="secondary">Limpar filtros</button>
+              </div>
+            </div>
+
+            <div id="paymentList"></div>
+          </div>
         </div>
       </section>
     </main>
