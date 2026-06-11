@@ -3,263 +3,577 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Imóveis em Dia - Full Stack</title>
+  <title>Imóveis em Dia</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div id="authScreen" class="auth-shell">
+  <div id="authScreen" class="auth-screen">
     <div class="auth-card">
       <h1>Imóveis em Dia</h1>
-      <p class="muted">Versão full stack pronta para teste local.</p>
+      <p class="auth-subtitle">Versão full stack pronta para teste local.</p>
+
       <div class="demo-box">
-        <strong>Login demo</strong><br>
-        E-mail: <code>admin@teste.com</code><br>
-        Senha: <code>123456</code>
-      </div>
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="loginTab">Entrar</button>
-        <button class="tab-btn" data-tab="registerTab">Cadastrar</button>
+        <strong>Login demo</strong>
+        <div>E-mail: admin@teste.com</div>
+        <div>Senha: 123456</div>
       </div>
 
-      <form id="loginTab" class="tab-panel stack">
-        <div><label>E-mail</label><input name="email" type="email" value="admin@teste.com" required /></div>
-        <div><label>Senha</label><input name="password" type="password" value="123456" required /></div>
-        <button type="submit">Entrar</button>
-      </form>
+      <div class="auth-tabs">
+        <button type="button" id="loginTab" class="active">Entrar</button>
+        <button type="button" id="registerTab">Cadastrar</button>
+      </div>
 
-      <form id="registerTab" class="tab-panel stack hidden">
-        <div><label>Nome</label><input name="name" required /></div>
-        <div><label>E-mail</label><input name="email" type="email" required /></div>
-        <div><label>Senha</label><input name="password" type="password" minlength="6" required /></div>
-        <button type="submit">Criar conta</button>
-      </form>
+      <div id="authMessage" class="auth-message"></div>
 
-      <div id="authMessage" class="message"></div>
+      <div id="loginPanel">
+        <form id="loginForm">
+          <label for="loginEmail">E-mail</label>
+          <input type="email" id="loginEmail" name="email" autocomplete="username" required />
+
+          <label for="loginPassword">Senha</label>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required />
+
+          <button type="submit" class="primary-btn">Entrar</button>
+        </form>
+      </div>
+
+      <div id="registerPanel" style="display:none;">
+        <form id="registerForm">
+          <label for="registerName">Nome</label>
+          <input type="text" id="registerName" name="name" required />
+
+          <label for="registerEmail">E-mail</label>
+          <input type="email" id="registerEmail" name="email" required />
+
+          <label for="registerPassword">Senha</label>
+          <input type="password" id="registerPassword" name="password" minlength="6" required />
+
+          <button type="submit" class="primary-btn">Cadastrar</button>
+        </form>
+      </div>
     </div>
   </div>
 
-  <div id="appShell" class="app hidden">
+  <div id="appShell" class="app-shell" style="display:none;">
     <aside class="sidebar">
-      <div class="brand">Imóveis em Dia <small>Full Stack</small></div>
-      <div class="user-card">
-        <div id="currentUserName">-</div>
-        <div id="currentUserEmail" class="muted small">-</div>
-        <button id="logoutBtn" class="secondary full">Sair</button>
+      <div class="sidebar-header">
+        <h2>Imóveis em Dia</h2>
+        <p id="currentUserName">Usuário</p>
       </div>
-      <nav class="nav">
-        <button class="nav-btn active" data-screen="dashboard">Painel</button>
-        <button class="nav-btn" data-screen="tenants">Inquilinos</button>
-        <button class="nav-btn" data-screen="managers">Administradoras</button>
-        <button class="nav-btn" data-screen="properties">Imóveis</button>
-        <button class="nav-btn" data-screen="configs">Categorias</button>
-        <button class="nav-btn" data-screen="launches">Lançamentos</button>
-        <button class="nav-btn" data-screen="payments">Pagamentos</button>
-        <button class="nav-btn" data-screen="reports">Relatórios</button>
+
+      <nav class="sidebar-nav">
+        <button type="button" data-screen="dashboard" class="active">Painel</button>
+        <button type="button" data-screen="tenants">Inquilinos</button>
+        <button type="button" data-screen="managers">Administradoras</button>
+        <button type="button" data-screen="properties">Imóveis</button>
+        <button type="button" data-screen="configs">Categorias</button>
+        <button type="button" data-screen="launches">Lançamentos</button>
+        <button type="button" data-screen="payments">Pagamentos</button>
+        <button type="button" data-screen="reports">Relatórios</button>
       </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" id="logoutBtn" class="danger-btn">Sair</button>
+      </div>
     </aside>
 
-    <main class="content">
-      <section id="dashboard" class="screen">
-        <div class="topbar">
-          <div>
-            <h2>Painel</h2>
-            <p class="muted">Resumo mensal com filtro por administradora.</p>
-          </div>
-          <div class="toolbar">
+    <main class="main-content">
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="screen active">
+        <div class="screen-header">
+          <h2>Painel</h2>
+        </div>
+
+        <div class="filters-row">
+          <div class="field">
+            <label for="dashboardMonth">Mês</label>
             <input type="month" id="dashboardMonth" />
-            <select id="dashboardManagerFilter"></select>
-            <button id="refreshDashboardBtn" class="secondary">Atualizar</button>
-            <button id="backupExportBtn" class="secondary" type="button">Fazer backup</button>
-            <button id="backupImportBtn" class="secondary" type="button">Restaurar backup</button>
-            <input id="backupImportFile" type="file" accept=".json,application/json" style="display:none" />
+          </div>
+
+          <div class="field">
+            <label for="dashboardManagerFilter">Administradora</label>
+            <select id="dashboardManagerFilter">
+              <option value="">Todas as administradoras</option>
+            </select>
+          </div>
+
+          <div class="field field-actions">
+            <label>&nbsp;</label>
+            <button type="button" id="refreshDashboardBtn">Atualizar</button>
           </div>
         </div>
-        <div id="dashboardCards" class="grid grid-4"></div>
-        <div class="card"><div id="dashboardTable"></div></div>
+
+        <div class="cards-grid">
+          <div class="info-card">
+            <span>Total previsto</span>
+            <strong id="dashboardTotalExpected">R$ 0,00</strong>
+          </div>
+          <div class="info-card">
+            <span>Total recebido</span>
+            <strong id="dashboardTotalReceived">R$ 0,00</strong>
+          </div>
+          <div class="info-card">
+            <span>Em aberto</span>
+            <strong id="dashboardOpenCount">0</strong>
+          </div>
+          <div class="info-card">
+            <span>Atrasados</span>
+            <strong id="dashboardLateCount">0</strong>
+          </div>
+        </div>
+
+        <div class="backup-row">
+          <button type="button" id="backupExportBtn">Exportar backup</button>
+          <button type="button" id="backupImportBtn">Importar backup</button>
+          <input type="file" id="backupImportFile" accept=".json,application/json" hidden />
+        </div>
+
+        <div id="dashboardList"></div>
       </section>
 
-      <section id="tenants" class="screen hidden">
-        <div class="topbar"><div><h2>Inquilinos</h2><p class="muted">Cadastro, edição e exclusão.</p></div></div>
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 id="tenantFormTitle">Novo inquilino</h3>
-            <form id="tenantForm" class="form-grid">
-              <input type="hidden" name="id" />
-              <div class="field col-6"><label>Nome</label><input name="name" required /></div>
-              <div class="field col-3"><label>Telefone</label><input name="phone" /></div>
-              <div class="field col-3"><label>E-mail</label><input name="email" type="email" /></div>
-              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelTenantEdit" class="secondary hidden">Cancelar edição</button></div>
-            </form>
-          </div>
-          <div class="card"><h3>Lista</h3><div id="tenantList"></div></div>
-        </div>
-      </section>
-
-      <section id="managers" class="screen hidden">
-        <div class="topbar"><div><h2>Administradoras</h2><p class="muted">Cadastro, edição e exclusão.</p></div></div>
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 id="managerFormTitle">Nova administradora</h3>
-            <form id="managerForm" class="form-grid">
-              <input type="hidden" name="id" />
-              <div class="field col-6"><label>Nome</label><input name="name" required /></div>
-              <div class="field col-3"><label>Telefone</label><input name="phone" /></div>
-              <div class="field col-3"><label>E-mail</label><input name="email" type="email" /></div>
-              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelManagerEdit" class="secondary hidden">Cancelar edição</button></div>
-            </form>
-          </div>
-          <div class="card"><h3>Lista</h3><div id="managerList"></div></div>
-        </div>
-      </section>
-
-      <section id="properties" class="screen hidden">
-        <div class="topbar"><div><h2>Imóveis</h2><p class="muted">Vincule imóvel a inquilino e administradora.</p></div></div>
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 id="propertyFormTitle">Novo imóvel</h3>
-            <form id="propertyForm" class="form-grid">
-              <input type="hidden" name="id" />
-              <div class="field col-6"><label>Nome do imóvel</label><input name="name" required /></div>
-              <div class="field col-6"><label>Endereço</label><input name="address" required /></div>
-              <div class="field col-4"><label>Inquilino</label><select name="tenant_id" id="propertyTenantSelect"></select></div>
-              <div class="field col-4"><label>Administradora</label><select name="manager_id" id="propertyManagerSelect"></select></div>
-              <div class="field col-4"><label>Aluguel base</label><input name="rent_value" type="number" step="0.01" required /></div>
-              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelPropertyEdit" class="secondary hidden">Cancelar edição</button></div>
-            </form>
-          </div>
-          <div class="card"><h3>Lista</h3><div id="propertyList"></div></div>
-        </div>
-      </section>
-
-      <section id="configs" class="screen hidden">
-        <div class="topbar"><div><h2>Categorias de cobrança</h2><p class="muted">Configure Aluguel, Condomínio, IPTU e outras.</p></div></div>
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 id="configFormTitle">Nova categoria</h3>
-            <form id="configForm" class="form-grid">
-              <input type="hidden" name="id" />
-              <div class="field col-12"><label>Imóvel</label><select name="property_id" id="configPropertySelect" required></select></div>
-              <div class="field col-4"><label>Categoria</label><input name="category_name" required /></div>
-              <div class="field col-2"><label>Valor</label><input name="amount" type="number" step="0.01" required /></div>
-              <div class="field col-2"><label>% administradora</label><input name="admin_fee_percent" type="number" min="0" max="100" step="0.01" /></div>
-              <div class="field col-2"><label>Vence dia</label><input name="due_day" type="number" min="1" max="31" required /></div>
-              <div class="field col-2"><label>Ativa</label><select name="active"><option value="1">Sim</option><option value="0">Não</option></select></div>
-              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelConfigEdit" class="secondary hidden">Cancelar edição</button></div>
-            </form>
-          </div>
-          <div class="card"><h3>Lista</h3><div id="configList"></div></div>
-        </div>
-      </section>
-
-      <section id="launches" class="screen hidden">
-        <div class="topbar">
-          <div><h2>Lançamentos mensais</h2><p class="muted">Competência = período do aluguel; vencimento no mês seguinte.</p></div>
-          <div class="toolbar">
-            <input type="month" id="launchMonth" />
-            <button id="generateLaunchesBtn">Gerar lançamentos</button>
-            <button id="refreshLaunchesBtn" class="secondary">Atualizar</button>
-          </div>
-        </div>
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 id="launchFormTitle">Editar lançamento</h3>
-            <form id="launchForm" class="form-grid">
-              <input type="hidden" name="id" />
-              <div class="field col-6"><label>Imóvel</label><input id="launchPropertyName" disabled /></div>
-              <div class="field col-6"><label>Categoria</label><input name="category_name" required /></div>
-              <div class="field col-3"><label>Competência</label><input name="competence" id="launchCompetenceInput" type="month" required /></div>
-              <div class="field col-3"><label>Início do período</label><input name="competence_start" id="launchCompetenceStart" type="date" required /></div>
-              <div class="field col-3"><label>Fim do período</label><input name="competence_end" id="launchCompetenceEnd" type="date" required /></div>
-              <div class="field col-3"><label>Vencimento</label><input name="due_date" type="date" required /></div>
-              <div class="field col-4"><label>Valor</label><input name="amount_expected" type="number" step="0.01" required /></div>
-              <div class="field col-4"><label>% administradora</label><input name="admin_fee_percent" type="number" min="0" max="100" step="0.01" /></div>
-              <div class="field col-4"><label>Status atual</label><input id="launchCurrentStatus" disabled /></div>
-              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions">
-                <button type="submit">Salvar alterações</button>
-                <button type="button" id="cancelLaunchEdit" class="secondary hidden">Cancelar edição</button>
-              </div>
-            </form>
-          </div>
-          <div class="card"><div id="launchList"></div></div>
-        </div>
-      </section>
-
-      <section id="payments" class="screen hidden">
-        <div class="topbar"><div><h2>Pagamentos</h2><p class="muted">Baixa com multa, juros, recibo e período pago.</p></div></div>
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 id="paymentFormTitle">Registrar pagamento</h3>
-            <form id="paymentForm" class="form-grid" enctype="multipart/form-data">
-              <input type="hidden" name="id" />
-              <div class="field col-12"><label>Lançamento</label><select name="launch_id" id="paymentLaunchSelect" required></select></div>
-              <div class="field col-4"><label>Valor previsto</label><input id="paymentExpected" disabled /></div>
-              <div class="field col-4"><label>Data de vencimento</label><input id="paymentDueDate" disabled /></div>
-              <div class="field col-4"><label>Competência</label><input id="paymentCompetence" disabled /></div>
-              <div class="field col-3"><label>Multa</label><input name="fine_amount" id="paymentFineAmount" type="number" step="0.01" min="0" value="0" /></div>
-              <div class="field col-3"><label>Juros</label><input name="interest_amount" id="paymentInterestAmount" type="number" step="0.01" min="0" value="0" /></div>
-              <div class="field col-3"><label>Valor recebido</label><input name="received_amount" id="paymentReceivedAmount" type="number" step="0.01" required /></div>
-              <div class="field col-3"><label>Data de pagamento</label><input name="payment_date" type="date" required /></div>
-              <div class="field col-4"><label>% administradora</label><input id="paymentAdminFeePercent" disabled /></div>
-              <div class="field col-4"><label>Taxa administradora</label><input id="paymentAdminFeeAmount" disabled /></div>
-              <div class="field col-4"><label>Recebimento líquido</label><input id="paymentNetReceived" disabled /></div>
-              <div class="field col-4"><label>Meio de pagamento</label><select name="payment_method_id" id="paymentMethodSelect"></select></div>
-              <div class="field col-8"><label>Novo meio de pagamento</label><div style="display:flex; gap:8px;"><input id="newPaymentMethodName" type="text" placeholder="Ex.: PIX, transferência, boleto" /><button id="addPaymentMethodBtn" type="button" class="secondary">Adicionar</button></div></div>
-              <div class="field col-4"><label>Conta de recebimento</label><select name="receiving_account_id" id="receivingAccountSelect"></select></div>
-              <div class="field col-8"><label>Nova conta de recebimento</label><div style="display:flex; gap:8px;"><input id="newReceivingAccountName" type="text" placeholder="Ex.: Conta Itaú, Caixa PJ, Nubank" /><button id="addReceivingAccountBtn" type="button" class="secondary">Adicionar</button></div></div>
-              <div class="field col-4"><label>Início do período pago</label><input name="rental_period_start" type="date" /></div>
-              <div class="field col-4"><label>Fim do período pago</label><input name="rental_period_end" type="date" /></div>
-              <div class="field col-12"><label>Recibo da administradora</label><input name="receipt" type="file" accept=".pdf,image/*" /></div>
-              <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions"><button type="submit">Salvar pagamento</button><button type="button" id="cancelPaymentEdit" class="secondary hidden">Cancelar edição</button></div>
-            </form>
-          </div>
-
-          <div class="card">
-            <h3>Pagamentos cadastrados</h3>
-            <div class="form-grid" style="margin-bottom:16px;">
-              <div class="field col-12"><label>Busca</label><input id="paymentSearch" type="text" placeholder="Buscar por imóvel, categoria, recibo ou observações" /></div>
-              <div class="field col-3"><label>Competência</label><select id="paymentCompetenceFilter"><option value="">Todas</option></select></div>
-              <div class="field col-3"><label>Categoria</label><select id="paymentCategoryFilter"><option value="">Todas</option></select></div>
-              <div class="field col-3"><label>Conta</label><select id="paymentAccountFilter"><option value="">Todas</option></select></div>
-              <div class="field col-3"><label>Meio de pagamento</label><select id="paymentMethodFilter"><option value="">Todos</option></select></div>
-              <div class="field col-12 actions"><button type="button" id="paymentClearFilters" class="secondary">Limpar filtros</button></div>
-            </div>
-            <div id="paymentList"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="reports" class="screen hidden">
-        <div class="topbar">
-          <div>
-            <h2>Relatórios e impressão</h2>
-            <p class="muted">Filtre vencimentos e pagamentos do mês e imprima.</p>
-          </div>
-          <div class="toolbar">
-            <button id="printReportBtn">Imprimir</button>
-            <button id="refreshReportsBtn" class="secondary">Atualizar relatório</button>
-          </div>
+      <!-- TENANTS -->
+      <section id="tenants" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Inquilinos</h2>
         </div>
 
-        <div class="card" style="margin-bottom:16px;">
+        <form id="tenantForm" class="form-card">
+          <input type="hidden" name="id" />
+
           <div class="form-grid">
-            <div class="field col-3"><label>Mês</label><input type="month" id="reportMonth" /></div>
-            <div class="field col-3"><label>Tipo</label><select id="reportType"><option value="all">Pagamentos + vencimentos</option><option value="payments">Só pagamentos</option><option value="open">Só vencimentos</option></select></div>
-            <div class="field col-3"><label>Imóvel</label><select id="reportPropertyFilter"><option value="">Todos</option></select></div>
-            <div class="field col-3"><label>Categoria</label><select id="reportCategoryFilter"><option value="">Todas</option></select></div>
-            <div class="field col-3"><label>Status</label><select id="reportStatusFilter"><option value="">Todos</option><option value="Pago">Pago</option><option value="Pago parcial">Pago parcial</option><option value="Em aberto">Em aberto</option><option value="Atrasado">Atrasado</option></select></div>
-            <div class="field col-9"><label>Busca</label><input id="reportSearch" type="text" placeholder="Buscar por imóvel, categoria, administradora ou observação" /></div>
+            <div class="field">
+              <label for="tenantName">Nome</label>
+              <input type="text" id="tenantName" name="name" required />
+            </div>
+
+            <div class="field">
+              <label for="tenantPhone">Telefone</label>
+              <input type="text" id="tenantPhone" name="phone" />
+            </div>
+
+            <div class="field">
+              <label for="tenantEmail">E-mail</label>
+              <input type="email" id="tenantEmail" name="email" />
+            </div>
+
+            <div class="field field-full">
+              <label for="tenantNotes">Observações</label>
+              <textarea id="tenantNotes" name="notes" rows="3"></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary-btn">Salvar inquilino</button>
+          </div>
+        </form>
+
+        <div id="tenantList"></div>
+      </section>
+
+      <!-- MANAGERS -->
+      <section id="managers" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Administradoras</h2>
+        </div>
+
+        <form id="managerForm" class="form-card">
+          <input type="hidden" name="id" />
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="managerName">Nome</label>
+              <input type="text" id="managerName" name="name" required />
+            </div>
+
+            <div class="field">
+              <label for="managerPhone">Telefone</label>
+              <input type="text" id="managerPhone" name="phone" />
+            </div>
+
+            <div class="field">
+              <label for="managerEmail">E-mail</label>
+              <input type="email" id="managerEmail" name="email" />
+            </div>
+
+            <div class="field field-full">
+              <label for="managerNotes">Observações</label>
+              <textarea id="managerNotes" name="notes" rows="3"></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary-btn">Salvar administradora</button>
+          </div>
+        </form>
+
+        <div id="managerList"></div>
+      </section>
+
+      <!-- PROPERTIES -->
+      <section id="properties" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Imóveis</h2>
+        </div>
+
+        <form id="propertyForm" class="form-card">
+          <input type="hidden" name="id" />
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="propertyName">Nome do imóvel</label>
+              <input type="text" id="propertyName" name="name" required />
+            </div>
+
+            <div class="field">
+              <label for="propertyAddress">Endereço</label>
+              <input type="text" id="propertyAddress" name="address" />
+            </div>
+
+            <div class="field">
+              <label for="propertyTenantSelect">Inquilino</label>
+              <select id="propertyTenantSelect" name="tenant_id">
+                <option value="">Selecione o inquilino</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="propertyManagerSelect">Administradora</label>
+              <select id="propertyManagerSelect" name="manager_id">
+                <option value="">Selecione a administradora</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="propertyRentValue">Aluguel base</label>
+              <input type="number" id="propertyRentValue" name="rent_value" step="0.01" min="0" />
+            </div>
+
+            <div class="field field-full">
+              <label for="propertyNotes">Observações</label>
+              <textarea id="propertyNotes" name="notes" rows="3"></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary-btn">Salvar imóvel</button>
+          </div>
+        </form>
+
+        <div id="propertyList"></div>
+      </section>
+
+      <!-- CONFIGS -->
+      <section id="configs" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Categorias de cobrança</h2>
+        </div>
+
+        <form id="configForm" class="form-card">
+          <input type="hidden" name="id" />
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="configPropertySelect">Imóvel</label>
+              <select id="configPropertySelect" name="property_id" required>
+                <option value="">Selecione o imóvel</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="configCategoryName">Categoria</label>
+              <input type="text" id="configCategoryName" name="category_name" required />
+            </div>
+
+            <div class="field">
+              <label for="configAmount">Valor</label>
+              <input type="number" id="configAmount" name="amount" step="0.01" min="0" required />
+            </div>
+
+            <div class="field">
+              <label for="configAdminFeePercent">% administradora</label>
+              <input type="number" id="configAdminFeePercent" name="admin_fee_percent" step="0.01" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="configDueDay">Vence dia</label>
+              <input type="number" id="configDueDay" name="due_day" min="1" max="31" required />
+            </div>
+
+            <div class="field">
+              <label for="configActive">Ativa</label>
+              <select id="configActive" name="active">
+                <option value="1">Sim</option>
+                <option value="0">Não</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary-btn">Salvar categoria</button>
+          </div>
+        </form>
+
+        <div id="configList"></div>
+      </section>
+
+      <!-- LAUNCHES -->
+      <section id="launches" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Lançamentos mensais</h2>
+        </div>
+
+        <div class="filters-row">
+          <div class="field">
+            <label for="launchMonth">Competência</label>
+            <input type="month" id="launchMonth" />
+          </div>
+
+          <div class="field field-actions">
+            <label>&nbsp;</label>
+            <button type="button" id="generateLaunchesBtn">Gerar lançamentos</button>
+          </div>
+
+          <div class="field field-actions">
+            <label>&nbsp;</label>
+            <button type="button" id="refreshLaunchesBtn">Atualizar</button>
           </div>
         </div>
 
-        <div class="card">
-          <div id="reportSummary" style="margin-bottom:16px;"></div>
-          <div id="reportTable"></div>
+        <div class="help-box">
+          Competência = período do aluguel. Exemplo: aluguel de janeiro com vencimento em fevereiro.
         </div>
+
+        <div id="launchList"></div>
+      </section>
+
+      <!-- PAYMENTS -->
+      <section id="payments" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Pagamentos</h2>
+        </div>
+
+        <form id="paymentForm" class="form-card">
+          <input type="hidden" name="id" />
+
+          <div class="form-grid">
+            <div class="field field-full">
+              <label for="paymentLaunchSelect">Lançamento</label>
+              <select id="paymentLaunchSelect" name="launch_id" required>
+                <option value="">Selecione o lançamento</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="paymentExpected">Valor previsto</label>
+              <input type="number" id="paymentExpected" name="amount_expected" step="0.01" readonly />
+            </div>
+
+            <div class="field">
+              <label for="paymentDueDate">Data de vencimento</label>
+              <input type="date" id="paymentDueDate" name="due_date" readonly />
+            </div>
+
+            <div class="field field-full">
+              <label for="paymentCompetence">Competência / período do aluguel</label>
+              <input type="text" id="paymentCompetence" name="competence_label" readonly />
+            </div>
+
+            <div class="field">
+              <label for="paymentFineAmount">Multa</label>
+              <input type="number" id="paymentFineAmount" name="fine_amount" step="0.01" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="paymentInterestAmount">Juros</label>
+              <input type="number" id="paymentInterestAmount" name="interest_amount" step="0.01" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="paymentReceivedAmount">Valor recebido</label>
+              <input type="number" id="paymentReceivedAmount" name="received_amount" step="0.01" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="paymentDate">Data de pagamento</label>
+              <input type="date" id="paymentDate" name="payment_date" />
+            </div>
+
+            <div class="field">
+              <label for="paymentAdminFeePercent">% administradora</label>
+              <input type="number" id="paymentAdminFeePercent" name="admin_fee_percent" step="0.01" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="paymentAdminFeeAmount">Taxa administradora</label>
+              <input type="number" id="paymentAdminFeeAmount" name="admin_fee_amount" step="0.01" readonly />
+            </div>
+
+            <div class="field">
+              <label for="paymentNetReceivedAmount">Recebimento líquido</label>
+              <input type="number" id="paymentNetReceivedAmount" name="net_received_amount" step="0.01" readonly />
+            </div>
+
+            <div class="field">
+              <label for="paymentMethodSelect">Meio de pagamento</label>
+              <select id="paymentMethodSelect" name="payment_method_id">
+                <option value="">Selecione o meio de pagamento</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="newPaymentMethod">Novo meio de pagamento</label>
+              <input type="text" id="newPaymentMethod" name="new_payment_method" />
+            </div>
+
+            <div class="field">
+              <label for="receivingAccountSelect">Conta de recebimento</label>
+              <select id="receivingAccountSelect" name="receiving_account_id">
+                <option value="">Selecione a conta</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="newReceivingAccount">Nova conta de recebimento</label>
+              <input type="text" id="newReceivingAccount" name="new_receiving_account" />
+            </div>
+
+            <div class="field">
+              <label for="paymentRentalStart">Início do período pago</label>
+              <input type="date" id="paymentRentalStart" name="rental_period_start" />
+            </div>
+
+            <div class="field">
+              <label for="paymentRentalEnd">Fim do período pago</label>
+              <input type="date" id="paymentRentalEnd" name="rental_period_end" />
+            </div>
+
+            <div class="field">
+              <label for="paymentReceipt">Recibo da administradora</label>
+              <input type="file" id="paymentReceipt" name="receipt" accept=".pdf,image/*" />
+            </div>
+
+            <div class="field field-full">
+              <label for="paymentNotes">Observações</label>
+              <textarea id="paymentNotes" name="notes" rows="3"></textarea>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary-btn">Salvar pagamento</button>
+            <button type="button" id="cancelPaymentEdit">Cancelar edição</button>
+          </div>
+        </form>
+
+        <div class="screen-header">
+          <h3>Pagamentos cadastrados</h3>
+        </div>
+
+        <div class="filters-row">
+          <div class="field">
+            <label for="paymentSearch">Busca</label>
+            <input type="text" id="paymentSearch" placeholder="Imóvel, categoria, conta, meio..." />
+          </div>
+
+          <div class="field">
+            <label for="paymentCompetenceFilter">Competência</label>
+            <input type="month" id="paymentCompetenceFilter" />
+          </div>
+
+          <div class="field">
+            <label for="paymentMonthFilter">Mês</label>
+            <input type="month" id="paymentMonthFilter" />
+          </div>
+
+          <div class="field">
+            <label for="paymentCategoryFilter">Categoria</label>
+            <select id="paymentCategoryFilter">
+              <option value="">Todas as categorias</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="paymentAccountFilter">Conta</label>
+            <select id="paymentAccountFilter">
+              <option value="">Todas as contas</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="paymentMethodFilter">Meio de pagamento</label>
+            <select id="paymentMethodFilter">
+              <option value="">Todos os meios</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="paymentStatusFilter">Status</label>
+            <select id="paymentStatusFilter">
+              <option value="">Todos</option>
+              <option value="Pago">Pago</option>
+              <option value="Pago parcial">Pago parcial</option>
+              <option value="Atrasado">Atrasado</option>
+              <option value="Em aberto">Em aberto</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="paymentList"></div>
+      </section>
+
+      <!-- REPORTS -->
+      <section id="reports" class="screen" style="display:none;">
+        <div class="screen-header">
+          <h2>Relatórios e impressão</h2>
+        </div>
+
+        <div class="filters-row">
+          <div class="field">
+            <label for="reportMonth">Mês</label>
+            <input type="month" id="reportMonth" />
+          </div>
+
+          <div class="field">
+            <label for="reportManagerFilter">Administradora</label>
+            <select id="reportManagerFilter">
+              <option value="">Todas as administradoras</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="reportPropertyFilter">Imóvel</label>
+            <select id="reportPropertyFilter">
+              <option value="">Todos os imóveis</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="reportCategoryFilter">Categoria</label>
+            <select id="reportCategoryFilter">
+              <option value="">Todas as categorias</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="reportTypeFilter">Tipo</label>
+            <select id="reportTypeFilter">
+              <option value="all">Todos</option>
+              <option value="payments">Pagamentos</option>
+              <option value="due">Vencimentos</option>
+            </select>
+          </div>
+
+          <div class="field field-actions">
+            <label>&nbsp;</label>
+            <button type="button" id="refreshReportBtn">Atualizar</button>
+          </div>
+        </div>
+
+        <div class="report-actions">
+          <button type="button" id="exportReportBtn">Exportar CSV</button>
+          <button type="button" id="printReportBtn">Imprimir</button>
+        </div>
+
+        <div id="reportList"></div>
       </section>
     </main>
   </div>
