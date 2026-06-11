@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS category_configs (
   property_id BIGINT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   category_name TEXT NOT NULL,
   amount NUMERIC(12,2) NOT NULL,
+  admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
   due_day INTEGER NOT NULL,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS launches (
   amount_expected NUMERIC(12,2) NOT NULL,
   due_date DATE NOT NULL,
   notes TEXT,
+  admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT launches_competence_check CHECK (competence ~ '^[0-9]{4}-[0-9]{2}$'),
   CONSTRAINT launches_unique_per_config UNIQUE (user_id, config_id, competence)
@@ -85,6 +87,11 @@ CREATE TABLE IF NOT EXISTS payments (
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   launch_id BIGINT NOT NULL UNIQUE REFERENCES launches(id) ON DELETE CASCADE,
   received_amount NUMERIC(12,2) NOT NULL,
+  fine_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  interest_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+  admin_fee_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  net_received_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
   payment_date DATE NOT NULL,
   payment_method_id BIGINT REFERENCES payment_methods(id) ON DELETE SET NULL,
   receiving_account_id BIGINT REFERENCES receiving_accounts(id) ON DELETE SET NULL,
@@ -108,17 +115,26 @@ CREATE INDEX IF NOT EXISTS idx_launches_user_competence ON launches(user_id, com
 CREATE INDEX IF NOT EXISTS idx_launches_property_id ON launches(property_id);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date);
-ALTER TABLE category_configs
-ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
 
-ALTER TABLE launches
-ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE category_configs ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE launches ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS fine_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS interest_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS admin_fee_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS net_received_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
 
-ALTER TABLE payments
-ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+UPDATE launches l
+SET admin_fee_percent = COALESCE(c.admin_fee_percent, 0)
+FROM category_configs c
+WHERE c.id = l.config_id
+  AND COALESCE(l.admin_fee_percent, 0) = 0;
 
-ALTER TABLE payments
-ADD COLUMN IF NOT EXISTS admin_fee_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
-
-ALTER TABLE payments
-ADD COLUMN IF NOT EXISTS net_received_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+UPDATE payments p
+SET fine_amount = COALESCE(p.fine_amount, 0),
+    interest_amount = COALESCE(p.interest_amount, 0),
+    admin_fee_percent = COALESCE(NULLIF(p.admin_fee_percent, 0), l.admin_fee_percent, 0),
+    admin_fee_amount = ROUND(((COALESCE(p.received_amount, 0) * COALESCE(COALESCE(NULLIF(p.admin_fee_percent, 0), l.admin_fee_percent), 0)) / 100.0), 2),
+    net_received_amount = ROUND(COALESCE(p.received_amount, 0) - ((COALESCE(p.received_amount, 0) * COALESCE(COALESCE(NULLIF(p.admin_fee_percent, 0), l.admin_fee_percent), 0)) / 100.0), 2)
+FROM launches l
+WHERE l.id = p.launch_id;
