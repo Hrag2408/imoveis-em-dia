@@ -172,25 +172,21 @@ function renderPaymentFilters() {
   const accounts = uniqueSorted(cache.payments.map((p) => p.receiving_account_name));
   const methods = uniqueSorted(cache.payments.map((p) => p.payment_method_name));
 
-  $('#paymentCompetenceFilter').innerHTML =
-    ['<option value="">Todas</option>']
-      .concat(competences.map((v) => `<option value="${v}">${monthBR(v)}</option>`))
-      .join('');
+  $('#paymentCompetenceFilter').innerHTML = ['<option value="">Todas</option>']
+    .concat(competences.map((v) => `<option value="${v}">${monthBR(v)}</option>`))
+    .join('');
 
-  $('#paymentCategoryFilter').innerHTML =
-    ['<option value="">Todas</option>']
-      .concat(categories.map((v) => `<option value="${v}">${v}</option>`))
-      .join('');
+  $('#paymentCategoryFilter').innerHTML = ['<option value="">Todas</option>']
+    .concat(categories.map((v) => `<option value="${v}">${v}</option>`))
+    .join('');
 
-  $('#paymentAccountFilter').innerHTML =
-    ['<option value="">Todas</option>']
-      .concat(accounts.map((v) => `<option value="${v}">${v}</option>`))
-      .join('');
+  $('#paymentAccountFilter').innerHTML = ['<option value="">Todas</option>']
+    .concat(accounts.map((v) => `<option value="${v}">${v}</option>`))
+    .join('');
 
-  $('#paymentMethodFilter').innerHTML =
-    ['<option value="">Todos</option>']
-      .concat(methods.map((v) => `<option value="${v}">${v}</option>`))
-      .join('');
+  $('#paymentMethodFilter').innerHTML = ['<option value="">Todos</option>']
+    .concat(methods.map((v) => `<option value="${v}">${v}</option>`))
+    .join('');
 }
 
 function renderPaymentSelects() {
@@ -203,13 +199,11 @@ function renderPaymentSelects() {
     .join('');
 
   const launchOpts = ['<option value="">Selecione</option>']
-    .concat(
-      cache.launches.map((l) => `
-        <option value="${l.id}">
-          ${l.property_name} · ${l.category_name} · ${monthBR(l.competence)} · vence ${dateBR(l.due_date)}
-        </option>
-      `)
-    )
+    .concat(cache.launches.map((l) => `
+      <option value="${l.id}">
+        ${l.property_name} · ${l.category_name} · ${monthBR(l.competence)} · vence ${dateBR(l.due_date)}
+      </option>
+    `))
     .join('');
 
   $('#paymentMethodSelect').innerHTML = methodOpts;
@@ -926,3 +920,53 @@ $('#paymentForm').addEventListener('submit', async (e) => {
       receiptFd.append('receipt', receipt);
       await api(`/api/payments/${payment.id}/receipt`, { method: 'POST', body: receiptFd });
     }
+
+    resetForm('#paymentForm', '#paymentFormTitle', 'Registrar pagamento', '#cancelPaymentEdit');
+    $('#paymentFineAmount').value = '0.00';
+    $('#paymentInterestAmount').value = '0.00';
+    $('#paymentReceivedAmount').value = '';
+    clearPaymentComputedFields();
+    await refreshAll();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$('#cancelPaymentEdit').addEventListener('click', () => {
+  resetForm('#paymentForm', '#paymentFormTitle', 'Registrar pagamento', '#cancelPaymentEdit');
+  $('#paymentFineAmount').value = '0.00';
+  $('#paymentInterestAmount').value = '0.00';
+  $('#paymentReceivedAmount').value = '';
+  clearPaymentComputedFields();
+});
+
+window.editPayment = (id) => {
+  const item = cache.payments.find((x) => x.id === id);
+  if (!item) return;
+
+  fillForm('#paymentForm', item);
+  $('#paymentFormTitle').textContent = 'Editar pagamento';
+  $('#cancelPaymentEdit').classList.remove('hidden');
+
+  const launch = cache.launches.find((l) => l.id === item.launch_id);
+  $('#paymentExpected').value = launch ? money(launch.amount_expected) : '';
+  $('#paymentDueDate').value = launch ? dateBR(launch.due_date) : '';
+  $('#paymentCompetence').value = launch ? monthBR(launch.competence) : '';
+  $('#paymentReceivedAmount').value = Number(item.received_amount || 0).toFixed(2);
+  $('#paymentFineAmount').value = Number(item.fine_amount || 0).toFixed(2);
+  $('#paymentInterestAmount').value = Number(item.interest_amount || 0).toFixed(2);
+  $('#paymentAdminFeePercent').value = `${Number(item.admin_fee_percent || launch?.admin_fee_percent || 0).toFixed(2)}%`;
+  $('#paymentAdminFeeAmount').value = money(item.admin_fee_amount || 0);
+  $('#paymentNetReceived').value = money(item.net_received_amount || 0);
+
+  switchScreen('payments');
+};
+
+window.deletePayment = async (id) => {
+  if (!confirm('Excluir este pagamento?')) return;
+  await api(`/api/payments/${id}`, { method: 'DELETE' });
+  await refreshAll();
+};
+
+fillMonthDefaults();
+bootFromSession();
