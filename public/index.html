@@ -88,10 +88,7 @@
               <div class="field col-3"><label>Telefone</label><input name="phone" /></div>
               <div class="field col-3"><label>E-mail</label><input name="email" type="email" /></div>
               <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions">
-                <button type="submit">Salvar</button>
-                <button type="button" id="cancelTenantEdit" class="secondary hidden">Cancelar edição</button>
-              </div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelTenantEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
           </div>
           <div class="card"><h3>Lista</h3><div id="tenantList"></div></div>
@@ -109,10 +106,7 @@
               <div class="field col-3"><label>Telefone</label><input name="phone" /></div>
               <div class="field col-3"><label>E-mail</label><input name="email" type="email" /></div>
               <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions">
-                <button type="submit">Salvar</button>
-                <button type="button" id="cancelManagerEdit" class="secondary hidden">Cancelar edição</button>
-              </div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelManagerEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
           </div>
           <div class="card"><h3>Lista</h3><div id="managerList"></div></div>
@@ -132,10 +126,7 @@
               <div class="field col-4"><label>Administradora</label><select name="manager_id" id="propertyManagerSelect"></select></div>
               <div class="field col-4"><label>Aluguel base</label><input name="rent_value" type="number" step="0.01" required /></div>
               <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions">
-                <button type="submit">Salvar</button>
-                <button type="button" id="cancelPropertyEdit" class="secondary hidden">Cancelar edição</button>
-              </div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelPropertyEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
           </div>
           <div class="card"><h3>Lista</h3><div id="propertyList"></div></div>
@@ -155,10 +146,7 @@
               <div class="field col-2"><label>% administradora</label><input name="admin_fee_percent" type="number" min="0" max="100" step="0.01" placeholder="Ex.: 10" /></div>
               <div class="field col-2"><label>Vence dia</label><input name="due_day" type="number" min="1" max="31" required /></div>
               <div class="field col-2"><label>Ativa</label><select name="active"><option value="1">Sim</option><option value="0">Não</option></select></div>
-              <div class="field col-12 actions">
-                <button type="submit">Salvar</button>
-                <button type="button" id="cancelConfigEdit" class="secondary hidden">Cancelar edição</button>
-              </div>
+              <div class="field col-12 actions"><button type="submit">Salvar</button><button type="button" id="cancelConfigEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
           </div>
           <div class="card"><h3>Lista</h3><div id="configList"></div></div>
@@ -189,85 +177,39 @@
               <div class="field col-4"><label>Data de vencimento</label><input id="paymentDueDate" disabled /></div>
               <div class="field col-4"><label>Competência</label><input id="paymentCompetence" disabled /></div>
 
+              <div class="field col-3"><label>Multa</label><input name="fine_amount" id="paymentFineAmount" type="number" step="0.01" min="0" value="0" /></div>
+              <div class="field col-3"><label>Juros</label><input name="interest_amount" id="paymentInterestAmount" type="number" step="0.01" min="0" value="0" /></div>
+              <div class="field col-3"><label>Valor recebido</label><input name="received_amount" id="paymentReceivedAmount" type="number" step="0.01" required /></div>
+              <div class="field col-3"><label>Data de pagamento</label><input name="payment_date" type="date" required /></div>
+
               <div class="field col-4"><label>% administradora</label><input id="paymentAdminFeePercent" disabled /></div>
               <div class="field col-4"><label>Taxa administradora</label><input id="paymentAdminFeeAmount" disabled /></div>
               <div class="field col-4"><label>Recebimento líquido</label><input id="paymentNetReceived" disabled /></div>
 
-              <div class="field col-4"><label>Valor recebido</label><input name="received_amount" type="number" step="0.01" required /></div>
-              <div class="field col-4"><label>Data de pagamento</label><input name="payment_date" type="date" required /></div>
               <div class="field col-4"><label>Meio de pagamento</label><select name="payment_method_id" id="paymentMethodSelect"></select></div>
-
-              <div class="field col-8">
-                <label>Novo meio de pagamento</label>
-                <div style="display:flex; gap:8px;">
-                  <input id="newPaymentMethodName" type="text" placeholder="Ex.: PIX, transferência, boleto" />
-                  <button id="addPaymentMethodBtn" type="button" class="secondary">Adicionar</button>
-                </div>
-              </div>
+              <div class="field col-8"><label>Novo meio de pagamento</label><div style="display:flex; gap:8px;"><input id="newPaymentMethodName" type="text" placeholder="Ex.: PIX, transferência, boleto" /><button id="addPaymentMethodBtn" type="button" class="secondary">Adicionar</button></div></div>
 
               <div class="field col-4"><label>Conta de recebimento</label><select name="receiving_account_id" id="receivingAccountSelect"></select></div>
-
-              <div class="field col-8">
-                <label>Nova conta de recebimento</label>
-                <div style="display:flex; gap:8px;">
-                  <input id="newReceivingAccountName" type="text" placeholder="Ex.: Conta Itaú, Caixa PJ, Nubank" />
-                  <button id="addReceivingAccountBtn" type="button" class="secondary">Adicionar</button>
-                </div>
-              </div>
+              <div class="field col-8"><label>Nova conta de recebimento</label><div style="display:flex; gap:8px;"><input id="newReceivingAccountName" type="text" placeholder="Ex.: Conta Itaú, Caixa PJ, Nubank" /><button id="addReceivingAccountBtn" type="button" class="secondary">Adicionar</button></div></div>
 
               <div class="field col-4"><label>Início do período pago</label><input name="rental_period_start" type="date" /></div>
               <div class="field col-4"><label>Fim do período pago</label><input name="rental_period_end" type="date" /></div>
               <div class="field col-12"><label>Recibo da administradora</label><input name="receipt" type="file" accept=".pdf,image/*" /></div>
               <div class="field col-12"><label>Observações</label><textarea name="notes"></textarea></div>
-              <div class="field col-12 actions">
-                <button type="submit">Salvar pagamento</button>
-                <button type="button" id="cancelPaymentEdit" class="secondary hidden">Cancelar edição</button>
-              </div>
+              <div class="field col-12 actions"><button type="submit">Salvar pagamento</button><button type="button" id="cancelPaymentEdit" class="secondary hidden">Cancelar edição</button></div>
             </form>
           </div>
 
           <div class="card">
             <h3>Pagamentos cadastrados</h3>
-
             <div class="form-grid" style="margin-bottom:16px;">
-              <div class="field col-12">
-                <label>Busca</label>
-                <input id="paymentSearch" type="text" placeholder="Buscar por imóvel, categoria, recibo ou observações" />
-              </div>
-
-              <div class="field col-3">
-                <label>Competência</label>
-                <select id="paymentCompetenceFilter">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-
-              <div class="field col-3">
-                <label>Categoria</label>
-                <select id="paymentCategoryFilter">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-
-              <div class="field col-3">
-                <label>Conta</label>
-                <select id="paymentAccountFilter">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-
-              <div class="field col-3">
-                <label>Meio de pagamento</label>
-                <select id="paymentMethodFilter">
-                  <option value="">Todos</option>
-                </select>
-              </div>
-
-              <div class="field col-12 actions">
-                <button type="button" id="paymentClearFilters" class="secondary">Limpar filtros</button>
-              </div>
+              <div class="field col-12"><label>Busca</label><input id="paymentSearch" type="text" placeholder="Buscar por imóvel, categoria, recibo ou observações" /></div>
+              <div class="field col-3"><label>Competência</label><select id="paymentCompetenceFilter"><option value="">Todas</option></select></div>
+              <div class="field col-3"><label>Categoria</label><select id="paymentCategoryFilter"><option value="">Todas</option></select></div>
+              <div class="field col-3"><label>Conta</label><select id="paymentAccountFilter"><option value="">Todas</option></select></div>
+              <div class="field col-3"><label>Meio de pagamento</label><select id="paymentMethodFilter"><option value="">Todos</option></select></div>
+              <div class="field col-12 actions"><button type="button" id="paymentClearFilters" class="secondary">Limpar filtros</button></div>
             </div>
-
             <div id="paymentList"></div>
           </div>
         </div>
