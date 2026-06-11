@@ -124,9 +124,9 @@ function statusFromItem(item) {
 
 function statusClass(status) {
   const map = {
-    'Pago': 'success',
+    Pago: 'success',
     'Pago parcial': 'warning',
-    'Atrasado': 'danger',
+    Atrasado: 'danger',
     'Em aberto': 'muted'
   };
   return map[status] || 'muted';
@@ -188,10 +188,12 @@ async function api(url, options = {}) {
       (data && typeof data === 'object' && (data.error || data.message)) ||
       raw ||
       `Erro HTTP ${response.status}`;
+
     if (response.status === 401) {
       clearSession();
       showApp(false);
     }
+
     throw new Error(message);
   }
 
@@ -224,6 +226,7 @@ function fillCurrentUser() {
     byId('loggedUserName') ||
     byId('sidebarUserName') ||
     $('[data-current-user]');
+
   if (!target) return;
   target.textContent = user?.name || user?.email || 'Usuário';
 }
@@ -246,6 +249,7 @@ function switchScreen(screen) {
   $$('.screen, section[data-screen], main section[id]').forEach((section) => {
     if (!section.id) return;
     const isTarget = section.id === screen;
+
     if (
       ['dashboard', 'tenants', 'managers', 'properties', 'configs', 'launches', 'payments', 'reports'].includes(section.id)
     ) {
@@ -295,6 +299,7 @@ function formField(form, name, fallbackId = '') {
 
 function setSelectOptions(select, items, config = {}) {
   if (!select) return;
+
   const {
     placeholder = 'Selecione',
     valueKey = 'id',
@@ -302,7 +307,9 @@ function setSelectOptions(select, items, config = {}) {
   } = config;
 
   const current = select.value;
-  select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>` +
+
+  select.innerHTML =
+    `<option value="">${escapeHtml(placeholder)}</option>` +
     items
       .map((item) => {
         const value = item[valueKey];
@@ -386,6 +393,7 @@ function refreshAllSelects() {
     const categories = [...new Set(cache.payments.map((item) => item.category_name).filter(Boolean))]
       .sort()
       .map((name, index) => ({ id: index + 1, name }));
+
     paymentCategoryFilter.innerHTML =
       `<option value="">Todas as categorias</option>` +
       categories.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join('');
@@ -407,8 +415,8 @@ function refreshAllSelects() {
 
   const reportCategoryFilter = byId('reportCategoryFilter');
   if (reportCategoryFilter) {
-    const reportCategories = [...new Set(cache.reportRows.map((item) => item.category_name).filter(Boolean))]
-      .sort();
+    const reportCategories = [...new Set(cache.reportRows.map((item) => item.category_name).filter(Boolean))].sort();
+
     reportCategoryFilter.innerHTML =
       `<option value="">Todas as categorias</option>` +
       reportCategories.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
@@ -765,13 +773,16 @@ function renderMonthlyReport() {
     return includeType && includeProperty && includeManager && includeCategory;
   });
 
-  const totals = rows.reduce((acc, row) => {
-    acc.expected += toNumber(row.amount_expected);
-    acc.received += toNumber(row.received_amount);
-    acc.adminFee += toNumber(row.admin_fee_amount);
-    acc.net += toNumber(row.net_received_amount);
-    return acc;
-  }, { expected: 0, received: 0, adminFee: 0, net: 0 });
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.expected += toNumber(row.amount_expected);
+      acc.received += toNumber(row.received_amount);
+      acc.adminFee += toNumber(row.admin_fee_amount);
+      acc.net += toNumber(row.net_received_amount);
+      return acc;
+    },
+    { expected: 0, received: 0, adminFee: 0, net: 0 }
+  );
 
   if (!rows.length) {
     container.innerHTML = '<div class="empty-state">Nenhum registro encontrado para o relatório.</div>';
@@ -947,13 +958,22 @@ async function editLaunch(id) {
   const categoryName = prompt('Categoria:', item.category_name || '');
   if (categoryName === null) return;
 
-  const competenceStart = prompt('Início do período do aluguel (AAAA-MM-DD):', item.competence_start || firstDayOfMonth(item.competence || currentMonth()));
+  const competenceStart = prompt(
+    'Início do período do aluguel (AAAA-MM-DD):',
+    item.competence_start || firstDayOfMonth(item.competence || currentMonth())
+  );
   if (competenceStart === null) return;
 
-  const competenceEnd = prompt('Fim do período do aluguel (AAAA-MM-DD):', item.competence_end || lastDayOfDateMonth(competenceStart));
+  const competenceEnd = prompt(
+    'Fim do período do aluguel (AAAA-MM-DD):',
+    item.competence_end || lastDayOfDateMonth(competenceStart)
+  );
   if (competenceEnd === null) return;
 
-  const dueDate = prompt('Vencimento (AAAA-MM-DD):', item.due_date || `${nextMonth(monthFromDate(competenceStart))}-05`);
+  const dueDate = prompt(
+    'Vencimento (AAAA-MM-DD):',
+    item.due_date || `${nextMonth(monthFromDate(competenceStart))}-05`
+  );
   if (dueDate === null) return;
 
   const amountExpected = prompt('Valor previsto:', String(round2(item.amount_expected || 0).toFixed(2)));
@@ -1033,14 +1053,7 @@ async function loadDashboard() {
 }
 
 async function loadReferenceLists() {
-  const [
-    tenants,
-    managers,
-    properties,
-    configs,
-    methods,
-    accounts
-  ] = await Promise.all([
+  const [tenants, managers, properties, configs, methods, accounts] = await Promise.all([
     api('/api/tenants'),
     api('/api/managers'),
     api('/api/properties'),
@@ -1112,7 +1125,9 @@ function buildPaymentPayload(form) {
 
   const fineAmount = round2(toNumber(formField(form, 'fine_amount')?.value));
   const interestAmount = round2(toNumber(formField(form, 'interest_amount')?.value));
-  const expectedValue = round2(toNumber((byId('paymentExpected') || formField(form, 'amount_expected'))?.value || launch?.amount_expected || 0));
+  const expectedValue = round2(
+    toNumber((byId('paymentExpected') || formField(form, 'amount_expected'))?.value || launch?.amount_expected || 0)
+  );
 
   let receivedAmount = round2(toNumber(formField(form, 'received_amount')?.value));
   if (!receivedAmount) {
@@ -1162,7 +1177,9 @@ function buildPaymentPayload(form) {
 
 function downloadJsonBackup(data) {
   const fileName = `backup-imoveis-em-dia-${currentDate()}.json`;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: 'application/json;charset=utf-8'
+  });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -1210,18 +1227,22 @@ function exportReportCsv() {
   const lines = [headers.join(';')];
 
   rows.forEach((row) => {
-    lines.push([
-      row.manager_name || '',
-      row.property_name || '',
-      row.category_name || '',
-      row.competence_start || '',
-      row.competence_end || '',
-      row.due_date || '',
-      round2(row.amount_expected || 0).toFixed(2),
-      round2(row.received_amount || 0).toFixed(2),
-      row.payment_date || '',
-      statusFromItem(row)
-    ].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(';'));
+    lines.push(
+      [
+        row.manager_name || '',
+        row.property_name || '',
+        row.category_name || '',
+        row.competence_start || '',
+        row.competence_end || '',
+        row.due_date || '',
+        round2(row.amount_expected || 0).toFixed(2),
+        round2(row.received_amount || 0).toFixed(2),
+        row.payment_date || '',
+        statusFromItem(row)
+      ]
+        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+        .join(';')
+    );
   });
 
   const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
@@ -1272,6 +1293,7 @@ function printReport() {
       </body>
     </html>
   `);
+
   win.document.close();
   win.focus();
   win.print();
@@ -1347,6 +1369,7 @@ async function handleTenantSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const id = formField(form, 'id')?.value;
+
   const payload = {
     name: formField(form, 'name')?.value?.trim(),
     phone: formField(form, 'phone')?.value?.trim() || null,
@@ -1367,6 +1390,7 @@ async function handleManagerSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const id = formField(form, 'id')?.value;
+
   const payload = {
     name: formField(form, 'name')?.value?.trim(),
     phone: formField(form, 'phone')?.value?.trim() || null,
@@ -1387,6 +1411,7 @@ async function handlePropertySubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const id = formField(form, 'id')?.value;
+
   const payload = {
     name: formField(form, 'name')?.value?.trim(),
     address: formField(form, 'address')?.value?.trim() || null,
@@ -1409,6 +1434,7 @@ async function handleConfigSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const id = formField(form, 'id')?.value;
+
   const payload = {
     property_id: Number(formField(form, 'property_id')?.value || 0),
     category_name: formField(form, 'category_name')?.value?.trim(),
@@ -1429,10 +1455,12 @@ async function handleConfigSubmit(event) {
 
 async function handleGenerateLaunches() {
   const month = byId('launchMonth')?.value || currentMonth();
+
   await api('/api/launches/generate', {
     method: 'POST',
     body: { month }
   });
+
   await refreshAll();
   alert(`Lançamentos gerados para ${monthBR(month)}.`);
 }
@@ -1477,6 +1505,7 @@ async function handlePaymentSubmit(event) {
   if (receipt && result?.id) {
     const fd = new FormData();
     fd.append('receipt', receipt);
+
     await api(`/api/payments/${result.id}/receipt`, {
       method: 'POST',
       body: fd
@@ -1571,10 +1600,12 @@ function bindStaticEvents() {
     formField(byId('paymentForm'), 'interest_amount'),
     formField(byId('paymentForm'), 'received_amount'),
     formField(byId('paymentForm'), 'admin_fee_percent')
-  ].filter(Boolean).forEach((field) => {
-    field.addEventListener('input', syncPaymentPreview);
-    field.addEventListener('change', syncPaymentPreview);
-  });
+  ]
+    .filter(Boolean)
+    .forEach((field) => {
+      field.addEventListener('input', syncPaymentPreview);
+      field.addEventListener('change', syncPaymentPreview);
+    });
 
   byId('dashboardMonth')?.addEventListener('change', () => {
     loadDashboard().catch((error) => alert(error.message || 'Erro ao carregar painel.'));
@@ -1596,4 +1627,163 @@ function bindStaticEvents() {
   byId('paymentMethodFilter')?.addEventListener('change', renderPayments);
   byId('paymentStatusFilter')?.addEventListener('change', renderPayments);
 
-  byId('backupExportBtn')?.addEventListener('click', ()
+  byId('backupExportBtn')?.addEventListener('click', () => {
+    handleBackupExport().catch((error) => alert(error.message || 'Erro ao exportar backup.'));
+  });
+
+  byId('backupImportBtn')?.addEventListener('click', () => {
+    byId('backupImportFile')?.click();
+  });
+
+  byId('backupImportFile')?.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await handleBackupImport(file);
+    } catch (error) {
+      alert(error.message || 'Erro ao importar backup.');
+    } finally {
+      event.target.value = '';
+    }
+  });
+
+  byId('reportMonth')?.addEventListener('change', () => {
+    loadReport().catch((error) => alert(error.message || 'Erro ao carregar relatório.'));
+  });
+
+  byId('reportManagerFilter')?.addEventListener('change', () => {
+    loadReport().catch((error) => alert(error.message || 'Erro ao carregar relatório.'));
+  });
+
+  byId('reportPropertyFilter')?.addEventListener('change', renderMonthlyReport);
+  byId('reportCategoryFilter')?.addEventListener('change', renderMonthlyReport);
+  byId('reportTypeFilter')?.addEventListener('change', renderMonthlyReport);
+
+  byId('refreshReportBtn')?.addEventListener('click', () => {
+    loadReport().catch((error) => alert(error.message || 'Erro ao atualizar relatório.'));
+  });
+
+  byId('exportReportBtn')?.addEventListener('click', exportReportCsv);
+  byId('printReportBtn')?.addEventListener('click', printReport);
+}
+
+function bindDelegatedActions() {
+  document.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-action]');
+    if (!btn) return;
+
+    const id = Number(btn.dataset.id || 0);
+    const action = btn.dataset.action;
+
+    const run = async () => {
+      switch (action) {
+        case 'tenant-edit': {
+          const item = cache.tenants.find((row) => Number(row.id) === id);
+          if (item) fillTenantForm(item);
+          break;
+        }
+
+        case 'tenant-delete':
+          await handleDelete(`/api/tenants/${id}`, 'este inquilino');
+          break;
+
+        case 'manager-edit': {
+          const item = cache.managers.find((row) => Number(row.id) === id);
+          if (item) fillManagerForm(item);
+          break;
+        }
+
+        case 'manager-delete':
+          await handleDelete(`/api/managers/${id}`, 'esta administradora');
+          break;
+
+        case 'property-edit': {
+          const item = cache.properties.find((row) => Number(row.id) === id);
+          if (item) fillPropertyForm(item);
+          break;
+        }
+
+        case 'property-delete':
+          await handleDelete(`/api/properties/${id}`, 'este imóvel');
+          break;
+
+        case 'config-edit': {
+          const item = cache.configs.find((row) => Number(row.id) === id);
+          if (item) fillConfigForm(item);
+          break;
+        }
+
+        case 'config-delete':
+          await handleDelete(`/api/category-configs/${id}`, 'esta categoria');
+          break;
+
+        case 'launch-edit':
+          await editLaunch(id);
+          break;
+
+        case 'launch-delete':
+          await handleDelete(`/api/launches/${id}`, 'este lançamento');
+          break;
+
+        case 'payment-edit': {
+          const item = findPaymentById(id);
+          if (item) fillPaymentForm(item);
+          break;
+        }
+
+        case 'payment-delete':
+          await handleDelete(`/api/payments/${id}`, 'este pagamento');
+          break;
+
+        case 'payment-receipt': {
+          const item = findPaymentById(id);
+          if (item?.receipt_file_path) {
+            window.open(item.receipt_file_path, '_blank', 'noopener');
+          }
+          break;
+        }
+
+        default:
+          break;
+      }
+    };
+
+    run().catch((error) => {
+      alert(error.message || 'Erro ao executar ação.');
+    });
+  });
+}
+
+async function bootFromSession() {
+  const token = getToken();
+
+  if (!token) {
+    showApp(false);
+    switchTab('login');
+    return;
+  }
+
+  try {
+    showApp(true);
+    await refreshAll();
+    switchScreen('dashboard');
+  } catch (error) {
+    clearSession();
+    showApp(false);
+    switchTab('login');
+    console.error(error);
+  }
+}
+
+function init() {
+  fillMonthDefaults();
+  bindStaticEvents();
+  bindDelegatedActions();
+  bootFromSession().catch((error) => {
+    console.error(error);
+    showApp(false);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
