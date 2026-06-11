@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS launches (
   config_id BIGINT REFERENCES category_configs(id) ON DELETE SET NULL,
   category_name TEXT NOT NULL,
   competence CHAR(7) NOT NULL,
+  competence_start DATE NOT NULL,
+  competence_end DATE NOT NULL,
   amount_expected NUMERIC(12,2) NOT NULL,
   due_date DATE NOT NULL,
   notes TEXT,
@@ -118,11 +120,28 @@ CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date);
 
 ALTER TABLE category_configs ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
 ALTER TABLE launches ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE launches ADD COLUMN IF NOT EXISTS competence_start DATE;
+ALTER TABLE launches ADD COLUMN IF NOT EXISTS competence_end DATE;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS fine_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS interest_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS admin_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS admin_fee_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS net_received_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+UPDATE launches
+SET competence_start = to_date(competence || '-01', 'YYYY-MM-DD')
+WHERE competence_start IS NULL
+  AND competence IS NOT NULL;
+
+UPDATE launches
+SET competence_end = (
+  date_trunc('month', competence_start)::date + INTERVAL '1 month - 1 day'
+)::date
+WHERE competence_end IS NULL
+  AND competence_start IS NOT NULL;
+
+ALTER TABLE launches ALTER COLUMN competence_start SET NOT NULL;
+ALTER TABLE launches ALTER COLUMN competence_end SET NOT NULL;
 
 UPDATE launches l
 SET admin_fee_percent = COALESCE(c.admin_fee_percent, 0)
