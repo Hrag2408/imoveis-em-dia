@@ -29,8 +29,18 @@ function escapeHtml(value) {
 
 function toNumber(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
-  const normalized = String(value).replace(/\./g, '').replace(',', '.');
-  const num = Number(normalized);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+
+  const str = String(value).trim();
+  if (!str) return fallback;
+
+  if (str.includes(',')) {
+    const normalized = str.replace(/\./g, '').replace(',', '.');
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : fallback;
+  }
+
+  const num = Number(str);
   return Number.isFinite(num) ? num : fallback;
 }
 
@@ -45,11 +55,38 @@ function money(value) {
   });
 }
 
+function normalizeDateOnly(value) {
+  if (!value) return '';
+
+  const str = String(value).trim();
+
+  if (str.includes('T')) {
+    return str.slice(0, 10);
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  return str;
+}
+
 function dateBR(value) {
   if (!value) return '—';
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('pt-BR');
+
+  const normalized = normalizeDateOnly(value);
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleDateString('pt-BR');
+  }
+
+  return String(value);
 }
 
 function monthBR(value) {
@@ -72,7 +109,7 @@ function currentDate() {
 
 function monthFromDate(value) {
   if (!value) return '';
-  return String(value).slice(0, 7);
+  return normalizeDateOnly(value).slice(0, 7);
 }
 
 function firstDayOfMonth(month) {
@@ -96,7 +133,8 @@ function nextMonth(month) {
 
 function lastDayOfDateMonth(dateStr) {
   if (!dateStr) return '';
-  const [year, month] = String(dateStr).slice(0, 7).split('-').map(Number);
+  const normalized = normalizeDateOnly(dateStr);
+  const [year, month] = normalized.slice(0, 7).split('-').map(Number);
   const last = new Date(year, month, 0);
   return `${year}-${String(month).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
 }
@@ -110,7 +148,7 @@ function formatPeriod(start, end) {
 function statusFromItem(item) {
   const expected = round2(toNumber(item.amount_expected));
   const received = round2(toNumber(item.received_amount));
-  const dueDate = item.due_date || '';
+  const dueDate = normalizeDateOnly(item.due_date || '');
   const today = currentDate();
 
   if (item.payment_date || received > 0) {
@@ -857,10 +895,10 @@ function syncPaymentPreview() {
 
   if (launch) {
     if (expectedInput) expectedInput.value = round2(launch.amount_expected || 0).toFixed(2);
-    if (dueDateInput) dueDateInput.value = launch.due_date || '';
+    if (dueDateInput) dueDateInput.value = normalizeDateOnly(launch.due_date || '');
     if (competenceInput) competenceInput.value = formatPeriod(launch.competence_start, launch.competence_end);
-    if (periodStartInput && !periodStartInput.value) periodStartInput.value = launch.competence_start || '';
-    if (periodEndInput && !periodEndInput.value) periodEndInput.value = launch.competence_end || '';
+    if (periodStartInput && !periodStartInput.value) periodStartInput.value = normalizeDateOnly(launch.competence_start || '');
+    if (periodEndInput && !periodEndInput.value) periodEndInput.value = normalizeDateOnly(launch.competence_end || '');
     if (adminFeePercentInput && !adminFeePercentInput.value) {
       adminFeePercentInput.value = round2(launch.admin_fee_percent || 0).toFixed(2);
     }
@@ -960,19 +998,19 @@ async function editLaunch(id) {
 
   const competenceStart = prompt(
     'Início do período do aluguel (AAAA-MM-DD):',
-    item.competence_start || firstDayOfMonth(item.competence || currentMonth())
+    normalizeDateOnly(item.competence_start || firstDayOfMonth(item.competence || currentMonth()))
   );
   if (competenceStart === null) return;
 
   const competenceEnd = prompt(
     'Fim do período do aluguel (AAAA-MM-DD):',
-    item.competence_end || lastDayOfDateMonth(competenceStart)
+    normalizeDateOnly(item.competence_end || lastDayOfDateMonth(competenceStart))
   );
   if (competenceEnd === null) return;
 
   const dueDate = prompt(
     'Vencimento (AAAA-MM-DD):',
-    item.due_date || `${nextMonth(monthFromDate(competenceStart))}-05`
+    normalizeDateOnly(item.due_date || `${nextMonth(monthFromDate(competenceStart))}-05`)
   );
   if (dueDate === null) return;
 
@@ -1014,11 +1052,11 @@ function fillPaymentForm(item) {
   formField(form, 'fine_amount').value = round2(item.fine_amount || 0).toFixed(2);
   formField(form, 'interest_amount').value = round2(item.interest_amount || 0).toFixed(2);
   formField(form, 'received_amount').value = round2(item.received_amount || 0).toFixed(2);
-  formField(form, 'payment_date').value = item.payment_date || '';
+  formField(form, 'payment_date').value = normalizeDateOnly(item.payment_date || '');
   formField(form, 'payment_method_id').value = item.payment_method_id || '';
   formField(form, 'receiving_account_id').value = item.receiving_account_id || '';
-  formField(form, 'rental_period_start').value = item.rental_period_start || item.competence_start || '';
-  formField(form, 'rental_period_end').value = item.rental_period_end || item.competence_end || '';
+  formField(form, 'rental_period_start').value = normalizeDateOnly(item.rental_period_start || item.competence_start || '');
+  formField(form, 'rental_period_end').value = normalizeDateOnly(item.rental_period_end || item.competence_end || '');
   formField(form, 'admin_fee_percent').value = round2(item.admin_fee_percent || 0).toFixed(2);
   formField(form, 'admin_fee_amount').value = round2(item.admin_fee_amount || 0).toFixed(2);
   formField(form, 'net_received_amount').value = round2(item.net_received_amount || 0).toFixed(2);
@@ -1141,13 +1179,13 @@ function buildPaymentPayload(form) {
   const netReceivedAmount = round2(receivedAmount - adminFeeAmount);
 
   const rentalPeriodStart =
-    formField(form, 'rental_period_start')?.value ||
-    launch?.competence_start ||
+    normalizeDateOnly(formField(form, 'rental_period_start')?.value) ||
+    normalizeDateOnly(launch?.competence_start) ||
     firstDayOfMonth(launch?.competence || currentMonth());
 
   const rentalPeriodEnd =
-    formField(form, 'rental_period_end')?.value ||
-    launch?.competence_end ||
+    normalizeDateOnly(formField(form, 'rental_period_end')?.value) ||
+    normalizeDateOnly(launch?.competence_end) ||
     lastDayOfDateMonth(rentalPeriodStart);
 
   const payload = {
@@ -1158,7 +1196,7 @@ function buildPaymentPayload(form) {
     admin_fee_percent: adminFeePercent,
     admin_fee_amount: adminFeeAmount,
     net_received_amount: netReceivedAmount,
-    payment_date: formField(form, 'payment_date')?.value || null,
+    payment_date: normalizeDateOnly(formField(form, 'payment_date')?.value) || null,
     payment_method_id: Number(formField(form, 'payment_method_id')?.value || 0) || null,
     receiving_account_id: Number(formField(form, 'receiving_account_id')?.value || 0) || null,
     rental_period_start: rentalPeriodStart || null,
@@ -1232,12 +1270,12 @@ function exportReportCsv() {
         row.manager_name || '',
         row.property_name || '',
         row.category_name || '',
-        row.competence_start || '',
-        row.competence_end || '',
-        row.due_date || '',
+        normalizeDateOnly(row.competence_start || ''),
+        normalizeDateOnly(row.competence_end || ''),
+        normalizeDateOnly(row.due_date || ''),
         round2(row.amount_expected || 0).toFixed(2),
         round2(row.received_amount || 0).toFixed(2),
-        row.payment_date || '',
+        normalizeDateOnly(row.payment_date || ''),
         statusFromItem(row)
       ]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
