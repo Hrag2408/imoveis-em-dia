@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { all, get, run, pool } = require('../config/db');
+const { pool, all, get, run } = require('../config/db');
 const { authRequired } = require('../middleware/auth');
 
 const router = express.Router();
@@ -36,6 +36,15 @@ function parseId(value) {
   return Number.isFinite(id) ? id : 0;
 }
 
+function toNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function round2(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
 function requireFields(res, fields, body) {
   const missing = fields.filter((field) => body[field] === undefined || body[field] === null || body[field] === '');
   if (missing.length) {
@@ -54,48 +63,74 @@ async function ensureOwnershipOr404(res, table, id, userId) {
   return row;
 }
 
-function calcAdminFeeValues(receivedAmount, adminFeePercent) {
-  const received = Number(receivedAmount || 0);
-  const percent = Number(adminFeePercent || 0);
-  const adminFeeAmount = Number(((received * percent) / 100).toFixed(2));
-  const netReceivedAmount = Number((received - adminFeeAmount).toFixed(2));
+function computePaymentTotals(launch, payload = {}) {
+  const expected = round2(toNumber(launch.amount_expected));
+  const fine = round2(toNumber(payload.fine_amount));
+  const interest = round2(toNumber(payload.interest_amount));
+  const adminFeePercent = round2(toNumber(payload.admin_fee_percent, launch.admin_fee_percent || 0) || toNumber(launch.admin_fee_percent));
+  const receivedAmount = round2(expected + fine + interest);
+  const adminFeeAmount = round2((receivedAmount * adminFeePercent) / 100);
+  const netReceivedAmount = round2(receivedAmount - adminFeeAmount);
 
   return {
-    admin_fee_percent: percent,
+    fine_amount: fine,
+    interest_amount: interest,
+    admin_fee_percent: adminFeePercent,
+    received_amount: receivedAmount,
     admin_fee_amount: adminFeeAmount,
     net_received_amount: netReceivedAmount
   };
 }
 
-async function hasColumn(db, tableName, columnName) {
-  const result = await db.query(
-    `SELECT 1
-       FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = $1
-        AND column_name = $2
-      LIMIT 1`,
-    [tableName, columnName]
-  );
-  return result.rowCount > 0;
+function normalizeBackupPayload(body) {
+  if (body && body.data && typeof body.data === 'object') return body.data;
+  return body || {};
 }
 
-/* =========================
-   DASHBOARD
-========================= */
+async function exportUserData(userId) {
+  const [
+    tenants,
+    managers,
+    payment_methods,
+    receiving_accounts,
+    properties,
+    category_configs,
+    launches,
+    payments
+  ] = await Promise.all([
+    all('SELECT * FROM tenants WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM managers WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM payment_methods WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM receiving_accounts WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM properties WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM category_configs WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM launches WHERE user_id = ? ORDER BY id', [userId]),
+    all('SELECT * FROM payments WHERE user_id = ? ORDER BY id', [userId])
+  ]);
+
+  return {
+    tenants,
+    managers,
+    payment_methods,
+    receiving_accounts,
+    properties,
+    category_configs,
+    launches,
+    payments
+  };
+}
 
 router.get('/dashboard', async (req, res, next) => {
   try {
     const month = req.query.month;
     const managerId = req.query.manager_id;
-
-    if (!month) {
-      return res.status(400).json({ error: 'month é obrigatório no formato AAAA-MM.' });
-    }
+    if (!month) return res.status(400).json({ error: 'month é obrigatório no formato AAAA-MM.' });
 
     let sql = `
       SELECT l.*, p.name as property_name, m.name as manager_name, t.name as tenant_name,
-             pay.received_amount, pay.payment_date
+             pay.received_amount, pay.payment_date, pay.fine_amount, pay.interest_amount,
+             pay.admin_fee_percent as payment_admin_fee_percent,
+             pay.admin_fee_amount, pay.net_received_amount
       FROM launches l
       JOIN properties p ON p.id = l.property_id
       LEFT JOIN managers m ON m.id = p.manager_id
@@ -103,18 +138,16 @@ router.get('/dashboard', async (req, res, next) => {
       LEFT JOIN payments pay ON pay.launch_id = l.id
       WHERE l.user_id = ? AND l.competence = ?
     `;
-    const params = [req.user.id, month];
 
+    const params = [req.user.id, month];
     if (managerId) {
       sql += ' AND p.manager_id = ?';
       params.push(parseId(managerId));
     }
-
     sql += ' ORDER BY l.due_date, p.name, l.category_name';
 
     const items = await all(sql, params);
     const today = new Date().toISOString().slice(0, 10);
-
     const summary = items.reduce((acc, item) => {
       const status = item.received_amount != null
         ? (Number(item.received_amount) >= Number(item.amount_expected) ? 'Pago' : 'Pago parcial')
@@ -133,14 +166,9 @@ router.get('/dashboard', async (req, res, next) => {
   }
 });
 
-/* =========================
-   TENANTS
-========================= */
-
 router.get('/tenants', async (req, res, next) => {
   try {
-    const rows = await all('SELECT * FROM tenants WHERE user_id = ? ORDER BY name', [req.user.id]);
-    res.json(rows);
+    res.json(await all('SELECT * FROM tenants WHERE user_id = ? ORDER BY name', [req.user.id]));
   } catch (error) {
     next(error);
   }
@@ -149,14 +177,11 @@ router.get('/tenants', async (req, res, next) => {
 router.post('/tenants', async (req, res, next) => {
   try {
     if (requireFields(res, ['name'], req.body)) return;
-
     const { name, phone = null, email = null, notes = null } = req.body;
-
     const result = await run(
       'INSERT INTO tenants (user_id, name, phone, email, notes) VALUES (?, ?, ?, ?, ?)',
       [req.user.id, name, phone, email, notes]
     );
-
     res.status(201).json(await get('SELECT * FROM tenants WHERE id = ?', [result.id]));
   } catch (error) {
     next(error);
@@ -170,12 +195,10 @@ router.put('/tenants/:id', async (req, res, next) => {
     if (!row) return;
 
     const { name, phone = null, email = null, notes = null } = req.body;
-
     await run(
       'UPDATE tenants SET name = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND user_id = ?',
       [name || row.name, phone, email, notes, id, req.user.id]
     );
-
     res.json(await get('SELECT * FROM tenants WHERE id = ?', [id]));
   } catch (error) {
     next(error);
@@ -190,21 +213,15 @@ router.delete('/tenants/:id', async (req, res, next) => {
 
     await run('UPDATE properties SET tenant_id = NULL WHERE tenant_id = ? AND user_id = ?', [id, req.user.id]);
     await run('DELETE FROM tenants WHERE id = ? AND user_id = ?', [id, req.user.id]);
-
     res.json({ success: true });
   } catch (error) {
     next(error);
   }
 });
 
-/* =========================
-   MANAGERS
-========================= */
-
 router.get('/managers', async (req, res, next) => {
   try {
-    const rows = await all('SELECT * FROM managers WHERE user_id = ? ORDER BY name', [req.user.id]);
-    res.json(rows);
+    res.json(await all('SELECT * FROM managers WHERE user_id = ? ORDER BY name', [req.user.id]));
   } catch (error) {
     next(error);
   }
@@ -213,14 +230,11 @@ router.get('/managers', async (req, res, next) => {
 router.post('/managers', async (req, res, next) => {
   try {
     if (requireFields(res, ['name'], req.body)) return;
-
     const { name, phone = null, email = null, notes = null } = req.body;
-
     const result = await run(
       'INSERT INTO managers (user_id, name, phone, email, notes) VALUES (?, ?, ?, ?, ?)',
       [req.user.id, name, phone, email, notes]
     );
-
     res.status(201).json(await get('SELECT * FROM managers WHERE id = ?', [result.id]));
   } catch (error) {
     next(error);
@@ -234,12 +248,10 @@ router.put('/managers/:id', async (req, res, next) => {
     if (!row) return;
 
     const { name, phone = null, email = null, notes = null } = req.body;
-
     await run(
       'UPDATE managers SET name = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND user_id = ?',
       [name || row.name, phone, email, notes, id, req.user.id]
     );
-
     res.json(await get('SELECT * FROM managers WHERE id = ?', [id]));
   } catch (error) {
     next(error);
@@ -254,16 +266,11 @@ router.delete('/managers/:id', async (req, res, next) => {
 
     await run('UPDATE properties SET manager_id = NULL WHERE manager_id = ? AND user_id = ?', [id, req.user.id]);
     await run('DELETE FROM managers WHERE id = ? AND user_id = ?', [id, req.user.id]);
-
     res.json({ success: true });
   } catch (error) {
     next(error);
   }
 });
-
-/* =========================
-   PAYMENT METHODS
-========================= */
 
 router.get('/payment-methods', async (req, res, next) => {
   try {
@@ -276,12 +283,11 @@ router.get('/payment-methods', async (req, res, next) => {
 router.post('/payment-methods', async (req, res, next) => {
   try {
     if (requireFields(res, ['name'], req.body)) return;
+    const name = String(req.body.name || '').trim();
+    const exists = await get('SELECT * FROM payment_methods WHERE user_id = ? AND LOWER(name) = LOWER(?)', [req.user.id, name]);
+    if (exists) return res.status(409).json({ error: 'Já existe um meio de pagamento com esse nome.' });
 
-    const result = await run(
-      'INSERT INTO payment_methods (user_id, name) VALUES (?, ?)',
-      [req.user.id, req.body.name]
-    );
-
+    const result = await run('INSERT INTO payment_methods (user_id, name) VALUES (?, ?)', [req.user.id, name]);
     res.status(201).json(await get('SELECT * FROM payment_methods WHERE id = ?', [result.id]));
   } catch (error) {
     next(error);
@@ -292,10 +298,7 @@ router.delete('/payment-methods/:id', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     const inUse = await get('SELECT id FROM payments WHERE payment_method_id = ? AND user_id = ?', [id, req.user.id]);
-
-    if (inUse) {
-      return res.status(409).json({ error: 'Não é possível excluir: meio de pagamento em uso.' });
-    }
+    if (inUse) return res.status(409).json({ error: 'Não é possível excluir: meio de pagamento em uso.' });
 
     await run('DELETE FROM payment_methods WHERE id = ? AND user_id = ?', [id, req.user.id]);
     res.json({ success: true });
@@ -303,10 +306,6 @@ router.delete('/payment-methods/:id', async (req, res, next) => {
     next(error);
   }
 });
-
-/* =========================
-   RECEIVING ACCOUNTS
-========================= */
 
 router.get('/receiving-accounts', async (req, res, next) => {
   try {
@@ -319,12 +318,11 @@ router.get('/receiving-accounts', async (req, res, next) => {
 router.post('/receiving-accounts', async (req, res, next) => {
   try {
     if (requireFields(res, ['name'], req.body)) return;
+    const name = String(req.body.name || '').trim();
+    const exists = await get('SELECT * FROM receiving_accounts WHERE user_id = ? AND LOWER(name) = LOWER(?)', [req.user.id, name]);
+    if (exists) return res.status(409).json({ error: 'Já existe uma conta de recebimento com esse nome.' });
 
-    const result = await run(
-      'INSERT INTO receiving_accounts (user_id, name) VALUES (?, ?)',
-      [req.user.id, req.body.name]
-    );
-
+    const result = await run('INSERT INTO receiving_accounts (user_id, name) VALUES (?, ?)', [req.user.id, name]);
     res.status(201).json(await get('SELECT * FROM receiving_accounts WHERE id = ?', [result.id]));
   } catch (error) {
     next(error);
@@ -335,10 +333,7 @@ router.delete('/receiving-accounts/:id', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     const inUse = await get('SELECT id FROM payments WHERE receiving_account_id = ? AND user_id = ?', [id, req.user.id]);
-
-    if (inUse) {
-      return res.status(409).json({ error: 'Não é possível excluir: conta de recebimento em uso.' });
-    }
+    if (inUse) return res.status(409).json({ error: 'Não é possível excluir: conta de recebimento em uso.' });
 
     await run('DELETE FROM receiving_accounts WHERE id = ? AND user_id = ?', [id, req.user.id]);
     res.json({ success: true });
@@ -346,10 +341,6 @@ router.delete('/receiving-accounts/:id', async (req, res, next) => {
     next(error);
   }
 });
-
-/* =========================
-   PROPERTIES
-========================= */
 
 router.get('/properties', async (req, res, next) => {
   try {
@@ -361,7 +352,6 @@ router.get('/properties', async (req, res, next) => {
       WHERE p.user_id = ?
       ORDER BY p.name
     `, [req.user.id]);
-
     res.json(rows);
   } catch (error) {
     next(error);
@@ -371,14 +361,11 @@ router.get('/properties', async (req, res, next) => {
 router.post('/properties', async (req, res, next) => {
   try {
     if (requireFields(res, ['name', 'address'], req.body)) return;
-
     const { name, address, tenant_id = null, manager_id = null, rent_value = 0, notes = null } = req.body;
-
     const result = await run(
       'INSERT INTO properties (user_id, name, address, tenant_id, manager_id, rent_value, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.user.id, name, address, tenant_id || null, manager_id || null, Number(rent_value || 0), notes]
+      [req.user.id, name, address, tenant_id || null, manager_id || null, toNumber(rent_value), notes]
     );
-
     res.status(201).json(await get('SELECT * FROM properties WHERE id = ?', [result.id]));
   } catch (error) {
     next(error);
@@ -402,9 +389,8 @@ router.put('/properties/:id', async (req, res, next) => {
 
     await run(
       'UPDATE properties SET name = ?, address = ?, tenant_id = ?, manager_id = ?, rent_value = ?, notes = ? WHERE id = ? AND user_id = ?',
-      [name, address, tenant_id || null, manager_id || null, Number(rent_value || 0), notes, id, req.user.id]
+      [name, address, tenant_id || null, manager_id || null, toNumber(rent_value), notes, id, req.user.id]
     );
-
     res.json(await get('SELECT * FROM properties WHERE id = ?', [id]));
   } catch (error) {
     next(error);
@@ -424,10 +410,6 @@ router.delete('/properties/:id', async (req, res, next) => {
   }
 });
 
-/* =========================
-   CATEGORY CONFIGS
-========================= */
-
 router.get('/category-configs', async (req, res, next) => {
   try {
     const rows = await all(`
@@ -437,7 +419,6 @@ router.get('/category-configs', async (req, res, next) => {
       WHERE c.user_id = ?
       ORDER BY p.name, c.category_name
     `, [req.user.id]);
-
     res.json(rows);
   } catch (error) {
     next(error);
@@ -447,29 +428,18 @@ router.get('/category-configs', async (req, res, next) => {
 router.post('/category-configs', async (req, res, next) => {
   try {
     if (requireFields(res, ['property_id', 'category_name', 'amount', 'due_day'], req.body)) return;
-
-    const {
-      property_id,
-      category_name,
-      amount,
-      admin_fee_percent = 0,
-      due_day,
-      active = 1
-    } = req.body;
-
     const result = await run(
       'INSERT INTO category_configs (user_id, property_id, category_name, amount, admin_fee_percent, due_day, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.id,
-        parseId(property_id),
-        category_name,
-        Number(amount || 0),
-        Number(admin_fee_percent || 0),
-        Number(due_day || 1),
-        Number(active ? 1 : 0)
+        parseId(req.body.property_id),
+        req.body.category_name,
+        toNumber(req.body.amount),
+        toNumber(req.body.admin_fee_percent),
+        Number(req.body.due_day),
+        Number(req.body.active ?? 1)
       ]
     );
-
     res.status(201).json(await get('SELECT * FROM category_configs WHERE id = ?', [result.id]));
   } catch (error) {
     next(error);
@@ -486,25 +456,15 @@ router.put('/category-configs/:id', async (req, res, next) => {
       property_id = row.property_id,
       category_name = row.category_name,
       amount = row.amount,
-      admin_fee_percent = row.admin_fee_percent || 0,
+      admin_fee_percent = row.admin_fee_percent,
       due_day = row.due_day,
       active = row.active
     } = req.body;
 
     await run(
       'UPDATE category_configs SET property_id = ?, category_name = ?, amount = ?, admin_fee_percent = ?, due_day = ?, active = ? WHERE id = ? AND user_id = ?',
-      [
-        parseId(property_id),
-        category_name,
-        Number(amount || 0),
-        Number(admin_fee_percent || 0),
-        Number(due_day || 1),
-        Number(active ? 1 : 0),
-        id,
-        req.user.id
-      ]
+      [property_id, category_name, toNumber(amount), toNumber(admin_fee_percent), Number(due_day), Number(active) ? 1 : 0, id, req.user.id]
     );
-
     res.json(await get('SELECT * FROM category_configs WHERE id = ?', [id]));
   } catch (error) {
     next(error);
@@ -524,16 +484,14 @@ router.delete('/category-configs/:id', async (req, res, next) => {
   }
 });
 
-/* =========================
-   LAUNCHES
-========================= */
-
 router.get('/launches', async (req, res, next) => {
   try {
     const { month, manager_id } = req.query;
-
     let sql = `
-      SELECT l.*, p.name as property_name, m.name as manager_name, pay.received_amount, pay.payment_date
+      SELECT l.*, p.name as property_name, m.name as manager_name,
+             pay.received_amount, pay.payment_date, pay.fine_amount, pay.interest_amount,
+             pay.admin_fee_percent as payment_admin_fee_percent,
+             pay.admin_fee_amount, pay.net_received_amount
       FROM launches l
       JOIN properties p ON p.id = l.property_id
       LEFT JOIN managers m ON m.id = p.manager_id
@@ -546,7 +504,6 @@ router.get('/launches', async (req, res, next) => {
       sql += ' AND l.competence = ?';
       params.push(month);
     }
-
     if (manager_id) {
       sql += ' AND p.manager_id = ?';
       params.push(parseId(manager_id));
@@ -564,44 +521,34 @@ router.post('/launches/generate', async (req, res, next) => {
     const { month } = req.body;
     if (!month) return res.status(400).json({ error: 'month é obrigatório.' });
 
-    const configs = await all(
-      'SELECT * FROM category_configs WHERE user_id = ? AND active = 1',
-      [req.user.id]
-    );
-
+    const configs = await all('SELECT * FROM category_configs WHERE user_id = ? AND active = 1 ORDER BY id', [req.user.id]);
     const created = [];
 
     for (const cfg of configs) {
-      const exists = await get(
-        'SELECT id FROM launches WHERE user_id = ? AND config_id = ? AND competence = ?',
-        [req.user.id, cfg.id, month]
+      const exists = await get('SELECT id FROM launches WHERE user_id = ? AND config_id = ? AND competence = ?', [req.user.id, cfg.id, month]);
+      if (exists) continue;
+
+      const [year, monthNum] = month.split('-').map(Number);
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      const safeDay = Math.min(Number(cfg.due_day), lastDay);
+      const dueDate = `${year}-${String(monthNum).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+
+      const result = await run(
+        'INSERT INTO launches (user_id, property_id, config_id, category_name, competence, amount_expected, due_date, notes, admin_fee_percent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          req.user.id,
+          cfg.property_id,
+          cfg.id,
+          cfg.category_name,
+          month,
+          toNumber(cfg.amount),
+          dueDate,
+          null,
+          toNumber(cfg.admin_fee_percent)
+        ]
       );
 
-      if (!exists) {
-        const dueDate = (() => {
-          const [year, monthNum] = month.split('-').map(Number);
-          const lastDay = new Date(year, monthNum, 0).getDate();
-          const safeDay = Math.min(Number(cfg.due_day), lastDay);
-          return `${year}-${String(monthNum).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
-        })();
-
-        const result = await run(
-          'INSERT INTO launches (user_id, property_id, config_id, category_name, competence, amount_expected, due_date, notes, admin_fee_percent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            req.user.id,
-            cfg.property_id,
-            cfg.id,
-            cfg.category_name,
-            month,
-            Number(cfg.amount || 0),
-            dueDate,
-            null,
-            Number(cfg.admin_fee_percent || 0)
-          ]
-        );
-
-        created.push(await get('SELECT * FROM launches WHERE id = ?', [result.id]));
-      }
+      created.push(await get('SELECT * FROM launches WHERE id = ?', [result.id]));
     }
 
     res.status(201).json({ created_count: created.length, created });
@@ -621,20 +568,12 @@ router.put('/launches/:id', async (req, res, next) => {
       due_date = row.due_date,
       notes = row.notes,
       category_name = row.category_name,
-      admin_fee_percent = row.admin_fee_percent || 0
+      admin_fee_percent = row.admin_fee_percent
     } = req.body;
 
     await run(
       'UPDATE launches SET amount_expected = ?, due_date = ?, notes = ?, category_name = ?, admin_fee_percent = ? WHERE id = ? AND user_id = ?',
-      [
-        Number(amount_expected || 0),
-        due_date,
-        notes,
-        category_name,
-        Number(admin_fee_percent || 0),
-        id,
-        req.user.id
-      ]
+      [toNumber(amount_expected), due_date, notes, category_name, toNumber(admin_fee_percent), id, req.user.id]
     );
 
     res.json(await get('SELECT * FROM launches WHERE id = ?', [id]));
@@ -656,10 +595,6 @@ router.delete('/launches/:id', async (req, res, next) => {
   }
 });
 
-/* =========================
-   PAYMENTS
-========================= */
-
 router.get('/payments', async (req, res, next) => {
   try {
     const rows = await all(`
@@ -674,7 +609,6 @@ router.get('/payments', async (req, res, next) => {
       WHERE pay.user_id = ?
       ORDER BY pay.payment_date DESC, pay.id DESC
     `, [req.user.id]);
-
     res.json(rows);
   } catch (error) {
     next(error);
@@ -683,64 +617,54 @@ router.get('/payments', async (req, res, next) => {
 
 router.post('/payments', async (req, res, next) => {
   try {
-    if (requireFields(res, ['launch_id', 'received_amount', 'payment_date'], req.body)) return;
+    if (requireFields(res, ['launch_id', 'payment_date'], req.body)) return;
 
-    const launch = await get(
-      'SELECT * FROM launches WHERE id = ? AND user_id = ?',
-      [req.body.launch_id, req.user.id]
-    );
+    const launch = await get('SELECT * FROM launches WHERE id = ? AND user_id = ?', [req.body.launch_id, req.user.id]);
+    if (!launch) return res.status(404).json({ error: 'Lançamento não encontrado.' });
 
-    if (!launch) {
-      return res.status(404).json({ error: 'Lançamento não encontrado.' });
-    }
-
-    const feeValues = calcAdminFeeValues(
-      req.body.received_amount,
-      launch.admin_fee_percent || 0
-    );
-
-    const existing = await get(
-      'SELECT id FROM payments WHERE launch_id = ? AND user_id = ?',
-      [req.body.launch_id, req.user.id]
-    );
+    const totals = computePaymentTotals(launch, req.body);
+    const existing = await get('SELECT id FROM payments WHERE launch_id = ? AND user_id = ?', [req.body.launch_id, req.user.id]);
 
     if (existing) {
       await run(
-        'UPDATE payments SET received_amount = ?, payment_date = ?, payment_method_id = ?, receiving_account_id = ?, rental_period_start = ?, rental_period_end = ?, notes = ?, admin_fee_percent = ?, admin_fee_amount = ?, net_received_amount = ? WHERE id = ? AND user_id = ?',
+        'UPDATE payments SET received_amount = ?, fine_amount = ?, interest_amount = ?, admin_fee_percent = ?, admin_fee_amount = ?, net_received_amount = ?, payment_date = ?, payment_method_id = ?, receiving_account_id = ?, rental_period_start = ?, rental_period_end = ?, notes = ? WHERE id = ? AND user_id = ?',
         [
-          Number(req.body.received_amount || 0),
+          totals.received_amount,
+          totals.fine_amount,
+          totals.interest_amount,
+          totals.admin_fee_percent,
+          totals.admin_fee_amount,
+          totals.net_received_amount,
           req.body.payment_date,
           req.body.payment_method_id || null,
           req.body.receiving_account_id || null,
           req.body.rental_period_start || null,
           req.body.rental_period_end || null,
           req.body.notes || null,
-          feeValues.admin_fee_percent,
-          feeValues.admin_fee_amount,
-          feeValues.net_received_amount,
           existing.id,
           req.user.id
         ]
       );
-
       return res.json(await get('SELECT * FROM payments WHERE id = ?', [existing.id]));
     }
 
     const result = await run(
-      'INSERT INTO payments (user_id, launch_id, received_amount, payment_date, payment_method_id, receiving_account_id, rental_period_start, rental_period_end, notes, admin_fee_percent, admin_fee_amount, net_received_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO payments (user_id, launch_id, received_amount, fine_amount, interest_amount, admin_fee_percent, admin_fee_amount, net_received_amount, payment_date, payment_method_id, receiving_account_id, rental_period_start, rental_period_end, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.id,
         req.body.launch_id,
-        Number(req.body.received_amount || 0),
+        totals.received_amount,
+        totals.fine_amount,
+        totals.interest_amount,
+        totals.admin_fee_percent,
+        totals.admin_fee_amount,
+        totals.net_received_amount,
         req.body.payment_date,
         req.body.payment_method_id || null,
         req.body.receiving_account_id || null,
         req.body.rental_period_start || null,
         req.body.rental_period_end || null,
-        req.body.notes || null,
-        feeValues.admin_fee_percent,
-        feeValues.admin_fee_amount,
-        feeValues.net_received_amount
+        req.body.notes || null
       ]
     );
 
@@ -755,16 +679,12 @@ router.post('/payments/:id/receipt', upload.single('receipt'), async (req, res, 
     const id = parseId(req.params.id);
     const row = await ensureOwnershipOr404(res, 'payments', id, req.user.id);
     if (!row) return;
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'Arquivo receipt é obrigatório.' });
-    }
+    if (!req.file) return res.status(400).json({ error: 'Arquivo receipt é obrigatório.' });
 
     await run(
       'UPDATE payments SET receipt_file_path = ?, receipt_original_name = ? WHERE id = ? AND user_id = ?',
       [`/uploads/receipts/${req.file.filename}`, req.file.originalname, id, req.user.id]
     );
-
     res.json(await get('SELECT * FROM payments WHERE id = ?', [id]));
   } catch (error) {
     next(error);
@@ -777,41 +697,40 @@ router.put('/payments/:id', async (req, res, next) => {
     const row = await ensureOwnershipOr404(res, 'payments', id, req.user.id);
     if (!row) return;
 
-    const launch = await get(
-      'SELECT * FROM launches WHERE id = ? AND user_id = ?',
-      [row.launch_id, req.user.id]
-    );
+    const launch = await get('SELECT * FROM launches WHERE id = ? AND user_id = ?', [req.body.launch_id || row.launch_id, req.user.id]);
+    if (!launch) return res.status(404).json({ error: 'Lançamento não encontrado.' });
 
-    if (!launch) {
-      return res.status(404).json({ error: 'Lançamento não encontrado.' });
-    }
+    const mergedPayload = {
+      fine_amount: req.body.fine_amount ?? row.fine_amount,
+      interest_amount: req.body.interest_amount ?? row.interest_amount,
+      admin_fee_percent: req.body.admin_fee_percent ?? row.admin_fee_percent ?? launch.admin_fee_percent
+    };
 
-    const received_amount = req.body.received_amount !== undefined ? req.body.received_amount : row.received_amount;
+    const totals = computePaymentTotals(launch, mergedPayload);
+
     const payment_date = req.body.payment_date || row.payment_date;
     const payment_method_id = req.body.payment_method_id !== undefined ? (req.body.payment_method_id || null) : row.payment_method_id;
     const receiving_account_id = req.body.receiving_account_id !== undefined ? (req.body.receiving_account_id || null) : row.receiving_account_id;
     const rental_period_start = req.body.rental_period_start !== undefined ? (req.body.rental_period_start || null) : row.rental_period_start;
     const rental_period_end = req.body.rental_period_end !== undefined ? (req.body.rental_period_end || null) : row.rental_period_end;
-    const notes = req.body.notes !== undefined ? (req.body.notes || null) : row.notes;
-
-    const feeValues = calcAdminFeeValues(
-      received_amount,
-      launch.admin_fee_percent || row.admin_fee_percent || 0
-    );
+    const notes = req.body.notes !== undefined ? req.body.notes : row.notes;
 
     await run(
-      'UPDATE payments SET received_amount = ?, payment_date = ?, payment_method_id = ?, receiving_account_id = ?, rental_period_start = ?, rental_period_end = ?, notes = ?, admin_fee_percent = ?, admin_fee_amount = ?, net_received_amount = ? WHERE id = ? AND user_id = ?',
+      'UPDATE payments SET launch_id = ?, received_amount = ?, fine_amount = ?, interest_amount = ?, admin_fee_percent = ?, admin_fee_amount = ?, net_received_amount = ?, payment_date = ?, payment_method_id = ?, receiving_account_id = ?, rental_period_start = ?, rental_period_end = ?, notes = ? WHERE id = ? AND user_id = ?',
       [
-        Number(received_amount || 0),
+        launch.id,
+        totals.received_amount,
+        totals.fine_amount,
+        totals.interest_amount,
+        totals.admin_fee_percent,
+        totals.admin_fee_amount,
+        totals.net_received_amount,
         payment_date,
         payment_method_id,
         receiving_account_id,
         rental_period_start,
         rental_period_end,
         notes,
-        feeValues.admin_fee_percent,
-        feeValues.admin_fee_amount,
-        feeValues.net_received_amount,
         id,
         req.user.id
       ]
@@ -836,71 +755,16 @@ router.delete('/payments/:id', async (req, res, next) => {
   }
 });
 
-/* =========================
-   BACKUP EXPORT / IMPORT
-========================= */
-
 router.get('/backup/export', async (req, res, next) => {
   try {
-    const hasConfigAdminFee = await hasColumn(pool, 'category_configs', 'admin_fee_percent');
-    const hasLaunchAdminFee = await hasColumn(pool, 'launches', 'admin_fee_percent');
-    const hasPaymentAdminFeePercent = await hasColumn(pool, 'payments', 'admin_fee_percent');
-    const hasPaymentAdminFeeAmount = await hasColumn(pool, 'payments', 'admin_fee_amount');
-    const hasPaymentNetReceivedAmount = await hasColumn(pool, 'payments', 'net_received_amount');
-
-    const [
-      tenants,
-      managers,
-      paymentMethods,
-      receivingAccounts,
-      properties,
-      categoryConfigs,
-      launches,
-      payments
-    ] = await Promise.all([
-      all('SELECT id, name, phone, email, notes, created_at FROM tenants WHERE user_id = ? ORDER BY id', [req.user.id]),
-      all('SELECT id, name, phone, email, notes, created_at FROM managers WHERE user_id = ? ORDER BY id', [req.user.id]),
-      all('SELECT id, name, created_at FROM payment_methods WHERE user_id = ? ORDER BY id', [req.user.id]),
-      all('SELECT id, name, created_at FROM receiving_accounts WHERE user_id = ? ORDER BY id', [req.user.id]),
-      all('SELECT id, name, address, tenant_id, manager_id, rent_value, notes, created_at FROM properties WHERE user_id = ? ORDER BY id', [req.user.id]),
-      all(
-        `SELECT id, property_id, category_name, amount, due_day, active${hasConfigAdminFee ? ', admin_fee_percent' : ''}, created_at
-         FROM category_configs
-         WHERE user_id = ?
-         ORDER BY id`,
-        [req.user.id]
-      ),
-      all(
-        `SELECT id, property_id, config_id, category_name, competence, amount_expected, due_date, notes${hasLaunchAdminFee ? ', admin_fee_percent' : ''}, created_at
-         FROM launches
-         WHERE user_id = ?
-         ORDER BY id`,
-        [req.user.id]
-      ),
-      all(
-        `SELECT id, launch_id, received_amount, payment_date, payment_method_id, receiving_account_id, rental_period_start, rental_period_end, notes${hasPaymentAdminFeePercent ? ', admin_fee_percent' : ''}${hasPaymentAdminFeeAmount ? ', admin_fee_amount' : ''}${hasPaymentNetReceivedAmount ? ', net_received_amount' : ''}
-         FROM payments
-         WHERE user_id = ?
-         ORDER BY id`,
-        [req.user.id]
-      )
-    ]);
-
+    const data = await exportUserData(req.user.id);
     res.json({
       app: 'imoveis-em-dia',
-      backup_version: 1,
+      backup_version: 2,
       exported_at: new Date().toISOString(),
-      note: 'Este backup JSON não inclui os arquivos físicos dos recibos enviados.',
-      data: {
-        tenants,
-        managers,
-        payment_methods: paymentMethods,
-        receiving_accounts: receivingAccounts,
-        properties,
-        category_configs: categoryConfigs,
-        launches,
-        payments
-      }
+      receipts_included: false,
+      note: 'Este backup inclui apenas os dados do banco. Os arquivos físicos de recibo não são incluídos.',
+      data
     });
   } catch (error) {
     next(error);
@@ -909,33 +773,18 @@ router.get('/backup/export', async (req, res, next) => {
 
 router.post('/backup/import', async (req, res, next) => {
   const client = await pool.connect();
-  let transactionStarted = false;
-
   try {
-    const payload = req.body && typeof req.body === 'object' ? req.body : null;
-    if (!payload) {
-      return res.status(400).json({ error: 'Arquivo JSON inválido.' });
-    }
-
-    const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
-
-    const tenants = Array.isArray(data.tenants) ? data.tenants : [];
-    const managers = Array.isArray(data.managers) ? data.managers : [];
-    const paymentMethods = Array.isArray(data.payment_methods) ? data.payment_methods : [];
-    const receivingAccounts = Array.isArray(data.receiving_accounts) ? data.receiving_accounts : [];
-    const properties = Array.isArray(data.properties) ? data.properties : [];
-    const categoryConfigs = Array.isArray(data.category_configs) ? data.category_configs : [];
-    const launches = Array.isArray(data.launches) ? data.launches : [];
-    const payments = Array.isArray(data.payments) ? data.payments : [];
-
-    const hasConfigAdminFee = await hasColumn(client, 'category_configs', 'admin_fee_percent');
-    const hasLaunchAdminFee = await hasColumn(client, 'launches', 'admin_fee_percent');
-    const hasPaymentAdminFeePercent = await hasColumn(client, 'payments', 'admin_fee_percent');
-    const hasPaymentAdminFeeAmount = await hasColumn(client, 'payments', 'admin_fee_amount');
-    const hasPaymentNetReceivedAmount = await hasColumn(client, 'payments', 'net_received_amount');
+    const payload = normalizeBackupPayload(req.body);
+    const tenants = Array.isArray(payload.tenants) ? payload.tenants : [];
+    const managers = Array.isArray(payload.managers) ? payload.managers : [];
+    const paymentMethods = Array.isArray(payload.payment_methods) ? payload.payment_methods : [];
+    const receivingAccounts = Array.isArray(payload.receiving_accounts) ? payload.receiving_accounts : [];
+    const properties = Array.isArray(payload.properties) ? payload.properties : [];
+    const categoryConfigs = Array.isArray(payload.category_configs) ? payload.category_configs : [];
+    const launches = Array.isArray(payload.launches) ? payload.launches : [];
+    const payments = Array.isArray(payload.payments) ? payload.payments : [];
 
     await client.query('BEGIN');
-    transactionStarted = true;
 
     await client.query('DELETE FROM payments WHERE user_id = $1', [req.user.id]);
     await client.query('DELETE FROM launches WHERE user_id = $1', [req.user.id]);
@@ -948,200 +797,119 @@ router.post('/backup/import', async (req, res, next) => {
 
     const tenantMap = new Map();
     const managerMap = new Map();
-    const paymentMethodMap = new Map();
-    const receivingAccountMap = new Map();
+    const methodMap = new Map();
+    const accountMap = new Map();
     const propertyMap = new Map();
     const configMap = new Map();
     const launchMap = new Map();
-    const launchPercentMap = new Map();
 
-    for (const item of tenants) {
+    for (const row of tenants) {
       const result = await client.query(
         'INSERT INTO tenants (user_id, name, phone, email, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-        [req.user.id, item.name, item.phone || null, item.email || null, item.notes || null]
+        [req.user.id, row.name, row.phone || null, row.email || null, row.notes || null]
       );
-      tenantMap.set(Number(item.id), result.rows[0].id);
+      tenantMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of managers) {
+    for (const row of managers) {
       const result = await client.query(
         'INSERT INTO managers (user_id, name, phone, email, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-        [req.user.id, item.name, item.phone || null, item.email || null, item.notes || null]
+        [req.user.id, row.name, row.phone || null, row.email || null, row.notes || null]
       );
-      managerMap.set(Number(item.id), result.rows[0].id);
+      managerMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of paymentMethods) {
+    for (const row of paymentMethods) {
       const result = await client.query(
         'INSERT INTO payment_methods (user_id, name) VALUES ($1, $2) RETURNING id',
-        [req.user.id, item.name]
+        [req.user.id, row.name]
       );
-      paymentMethodMap.set(Number(item.id), result.rows[0].id);
+      methodMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of receivingAccounts) {
+    for (const row of receivingAccounts) {
       const result = await client.query(
         'INSERT INTO receiving_accounts (user_id, name) VALUES ($1, $2) RETURNING id',
-        [req.user.id, item.name]
+        [req.user.id, row.name]
       );
-      receivingAccountMap.set(Number(item.id), result.rows[0].id);
+      accountMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of properties) {
+    for (const row of properties) {
       const result = await client.query(
-        `INSERT INTO properties (user_id, name, address, tenant_id, manager_id, rent_value, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id`,
+        'INSERT INTO properties (user_id, name, address, tenant_id, manager_id, rent_value, notes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
         [
           req.user.id,
-          item.name,
-          item.address,
-          item.tenant_id ? (tenantMap.get(Number(item.tenant_id)) || null) : null,
-          item.manager_id ? (managerMap.get(Number(item.manager_id)) || null) : null,
-          Number(item.rent_value || 0),
-          item.notes || null
+          row.name,
+          row.address,
+          row.tenant_id != null ? (tenantMap.get(String(row.tenant_id)) || null) : null,
+          row.manager_id != null ? (managerMap.get(String(row.manager_id)) || null) : null,
+          toNumber(row.rent_value),
+          row.notes || null
         ]
       );
-      propertyMap.set(Number(item.id), result.rows[0].id);
+      propertyMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of categoryConfigs) {
-      const newPropertyId = propertyMap.get(Number(item.property_id));
-      if (!newPropertyId) continue;
-
-      const columns = ['user_id', 'property_id', 'category_name', 'amount', 'due_day', 'active'];
-      const values = [
-        req.user.id,
-        newPropertyId,
-        item.category_name,
-        Number(item.amount || 0),
-        Number(item.due_day || 1),
-        Number(item.active ? 1 : 0)
-      ];
-
-      if (hasConfigAdminFee) {
-        columns.push('admin_fee_percent');
-        values.push(Number(item.admin_fee_percent || 0));
-      }
-
-      const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+    for (const row of categoryConfigs) {
       const result = await client.query(
-        `INSERT INTO category_configs (${columns.join(', ')})
-         VALUES (${placeholders})
-         RETURNING id`,
-        values
+        'INSERT INTO category_configs (user_id, property_id, category_name, amount, admin_fee_percent, due_day, active) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [
+          req.user.id,
+          propertyMap.get(String(row.property_id)),
+          row.category_name,
+          toNumber(row.amount),
+          toNumber(row.admin_fee_percent),
+          Number(row.due_day),
+          Number(row.active ?? 1) ? 1 : 0
+        ]
       );
-
-      configMap.set(Number(item.id), result.rows[0].id);
+      configMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of launches) {
-      const newPropertyId = propertyMap.get(Number(item.property_id));
-      if (!newPropertyId) continue;
-
-      const newConfigId = item.config_id ? (configMap.get(Number(item.config_id)) || null) : null;
-
-      const columns = ['user_id', 'property_id', 'config_id', 'category_name', 'competence', 'amount_expected', 'due_date', 'notes'];
-      const values = [
-        req.user.id,
-        newPropertyId,
-        newConfigId,
-        item.category_name,
-        item.competence,
-        Number(item.amount_expected || 0),
-        item.due_date,
-        item.notes || null
-      ];
-
-      const launchPercent = Number(item.admin_fee_percent || 0);
-
-      if (hasLaunchAdminFee) {
-        columns.push('admin_fee_percent');
-        values.push(launchPercent);
-      }
-
-      const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+    for (const row of launches) {
+      const configId = row.config_id != null ? (configMap.get(String(row.config_id)) || null) : null;
       const result = await client.query(
-        `INSERT INTO launches (${columns.join(', ')})
-         VALUES (${placeholders})
-         RETURNING id`,
-        values
+        'INSERT INTO launches (user_id, property_id, config_id, category_name, competence, amount_expected, due_date, notes, admin_fee_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        [
+          req.user.id,
+          propertyMap.get(String(row.property_id)),
+          configId,
+          row.category_name,
+          row.competence,
+          toNumber(row.amount_expected),
+          row.due_date,
+          row.notes || null,
+          toNumber(row.admin_fee_percent)
+        ]
       );
-
-      launchMap.set(Number(item.id), result.rows[0].id);
-      launchPercentMap.set(Number(item.id), launchPercent);
+      launchMap.set(String(row.id), result.rows[0].id);
     }
 
-    for (const item of payments) {
-      const newLaunchId = launchMap.get(Number(item.launch_id));
+    for (const row of payments) {
+      const newLaunchId = launchMap.get(String(row.launch_id));
       if (!newLaunchId) continue;
 
-      const receivedAmount = Number(item.received_amount || 0);
-      const adminFeePercent = Number(
-        item.admin_fee_percent != null
-          ? item.admin_fee_percent
-          : (launchPercentMap.get(Number(item.launch_id)) || 0)
-      );
-
-      const defaultFee = calcAdminFeeValues(receivedAmount, adminFeePercent);
-
-      const adminFeeAmount = Number(
-        item.admin_fee_amount != null
-          ? item.admin_fee_amount
-          : defaultFee.admin_fee_amount
-      );
-
-      const netReceivedAmount = Number(
-        item.net_received_amount != null
-          ? item.net_received_amount
-          : defaultFee.net_received_amount
-      );
-
-      const columns = [
-        'user_id',
-        'launch_id',
-        'received_amount',
-        'payment_date',
-        'payment_method_id',
-        'receiving_account_id',
-        'rental_period_start',
-        'rental_period_end',
-        'notes'
-      ];
-
-      const values = [
-        req.user.id,
-        newLaunchId,
-        receivedAmount,
-        item.payment_date,
-        item.payment_method_id ? (paymentMethodMap.get(Number(item.payment_method_id)) || null) : null,
-        item.receiving_account_id ? (receivingAccountMap.get(Number(item.receiving_account_id)) || null) : null,
-        item.rental_period_start || null,
-        item.rental_period_end || null,
-        item.notes || null
-      ];
-
-      if (hasPaymentAdminFeePercent) {
-        columns.push('admin_fee_percent');
-        values.push(adminFeePercent);
-      }
-
-      if (hasPaymentAdminFeeAmount) {
-        columns.push('admin_fee_amount');
-        values.push(adminFeeAmount);
-      }
-
-      if (hasPaymentNetReceivedAmount) {
-        columns.push('net_received_amount');
-        values.push(netReceivedAmount);
-      }
-
-      const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
-
       await client.query(
-        `INSERT INTO payments (${columns.join(', ')})
-         VALUES (${placeholders})`,
-        values
+        'INSERT INTO payments (user_id, launch_id, received_amount, fine_amount, interest_amount, admin_fee_percent, admin_fee_amount, net_received_amount, payment_date, payment_method_id, receiving_account_id, rental_period_start, rental_period_end, receipt_file_path, receipt_original_name, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)',
+        [
+          req.user.id,
+          newLaunchId,
+          toNumber(row.received_amount),
+          toNumber(row.fine_amount),
+          toNumber(row.interest_amount),
+          toNumber(row.admin_fee_percent),
+          toNumber(row.admin_fee_amount),
+          toNumber(row.net_received_amount),
+          row.payment_date,
+          row.payment_method_id != null ? (methodMap.get(String(row.payment_method_id)) || null) : null,
+          row.receiving_account_id != null ? (accountMap.get(String(row.receiving_account_id)) || null) : null,
+          row.rental_period_start || null,
+          row.rental_period_end || null,
+          row.receipt_file_path || null,
+          row.receipt_original_name || null,
+          row.notes || null
+        ]
       );
     }
 
@@ -1161,55 +929,47 @@ router.post('/backup/import', async (req, res, next) => {
       }
     });
   } catch (error) {
-    if (transactionStarted) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (_) {}
-    }
+    await client.query('ROLLBACK');
     next(error);
   } finally {
     client.release();
   }
 });
 
-/* =========================
-   REPORTS
-========================= */
-
 router.get('/reports/monthly', async (req, res, next) => {
   try {
     const { month, manager_id } = req.query;
-
-    if (!month) {
-      return res.status(400).json({ error: 'month é obrigatório.' });
-    }
+    if (!month) return res.status(400).json({ error: 'month é obrigatório.' });
 
     let sql = `
       SELECT m.name as manager_name, p.name as property_name, l.category_name, l.competence,
-             l.amount_expected, l.due_date, pay.received_amount, pay.payment_date,
-             pay.rental_period_start, pay.rental_period_end, pay.receipt_original_name, pay.receipt_file_path
+             l.amount_expected, l.due_date, l.admin_fee_percent as launch_admin_fee_percent,
+             pay.received_amount, pay.fine_amount, pay.interest_amount,
+             pay.admin_fee_percent, pay.admin_fee_amount, pay.net_received_amount,
+             pay.payment_date, pay.rental_period_start, pay.rental_period_end,
+             pay.receipt_original_name, pay.receipt_file_path
       FROM launches l
       JOIN properties p ON p.id = l.property_id
       LEFT JOIN managers m ON m.id = p.manager_id
       LEFT JOIN payments pay ON pay.launch_id = l.id
       WHERE l.user_id = ? AND l.competence = ?
     `;
-    const params = [req.user.id, month];
 
+    const params = [req.user.id, month];
     if (manager_id) {
       sql += ' AND p.manager_id = ?';
       params.push(parseId(manager_id));
     }
 
     sql += ' ORDER BY m.name, p.name, l.category_name';
-
     const rows = await all(sql, params);
-
     const totals = rows.reduce((acc, row) => {
       acc.expected += Number(row.amount_expected || 0);
       acc.received += Number(row.received_amount || 0);
+      acc.admin_fee += Number(row.admin_fee_amount || 0);
+      acc.net_received += Number(row.net_received_amount || 0);
       return acc;
-    }, { expected: 0, received: 0 });
+    }, { expected: 0, received: 0, admin_fee: 0, net_received: 0 });
 
     res.json({ month, totals, rows });
   } catch (error) {
