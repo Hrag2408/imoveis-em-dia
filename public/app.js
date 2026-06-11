@@ -18,6 +18,35 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 const byId = (id) => document.getElementById(id);
 
+const NUMERIC_FIELDS = [
+  'rent_value',
+  'amount',
+  'amount_expected',
+  'received_amount',
+  'fine_amount',
+  'interest_amount',
+  'admin_fee_percent',
+  'admin_fee_amount',
+  'net_received_amount',
+  'total_expected',
+  'total_received',
+  'expected',
+  'received',
+  'admin_fee',
+  'net',
+  'net_received'
+];
+
+const DATE_FIELDS = [
+  'due_date',
+  'competence_start',
+  'competence_end',
+  'payment_date',
+  'rental_period_start',
+  'rental_period_end',
+  'created_at'
+];
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -60,13 +89,8 @@ function normalizeDateOnly(value) {
 
   const str = String(value).trim();
 
-  if (str.includes('T')) {
-    return str.slice(0, 10);
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return str;
-  }
+  if (str.includes('T')) return str.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
 
   return str;
 }
@@ -82,9 +106,7 @@ function dateBR(value) {
   }
 
   const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) {
-    return date.toLocaleDateString('pt-BR');
-  }
+  if (!Number.isNaN(date.getTime())) return date.toLocaleDateString('pt-BR');
 
   return String(value);
 }
@@ -143,6 +165,61 @@ function formatPeriod(start, end) {
   if (!start && !end) return '—';
   if (start && end) return `${dateBR(start)} a ${dateBR(end)}`;
   return dateBR(start || end);
+}
+
+function normalizeRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+
+  const normalized = { ...record };
+
+  for (const key of NUMERIC_FIELDS) {
+    if (key in normalized && normalized[key] !== null && normalized[key] !== undefined && normalized[key] !== '') {
+      normalized[key] = round2(toNumber(normalized[key]));
+    }
+  }
+
+  for (const key of DATE_FIELDS) {
+    if (key in normalized && normalized[key]) {
+      normalized[key] = normalizeDateOnly(normalized[key]);
+    }
+  }
+
+  if (normalized.competence && String(normalized.competence).includes('T')) {
+    normalized.competence = String(normalized.competence).slice(0, 7);
+  }
+
+  return normalized;
+}
+
+function normalizeArray(items) {
+  return Array.isArray(items) ? items.map(normalizeRecord) : [];
+}
+
+function computeDashboardSummary(items) {
+  const today = currentDate();
+
+  return items.reduce(
+    (acc, item) => {
+      const expected = round2(toNumber(item.amount_expected));
+      const received = round2(toNumber(item.received_amount));
+      const dueDate = normalizeDateOnly(item.due_date || '');
+
+      let status = 'Em aberto';
+      if (item.payment_date || received > 0) {
+        status = received >= expected && expected > 0 ? 'Pago' : 'Pago parcial';
+      } else if (dueDate && dueDate < today) {
+        status = 'Atrasado';
+      }
+
+      acc.total_expected += expected;
+      acc.total_received += received;
+      if (status === 'Atrasado') acc.late_count += 1;
+      if (status === 'Em aberto' || status === 'Atrasado') acc.open_count += 1;
+
+      return acc;
+    },
+    { total_expected: 0, total_received: 0, open_count: 0, late_count: 0 }
+  );
 }
 
 function statusFromItem(item) {
@@ -252,9 +329,7 @@ function showApp(isLoggedIn) {
   if (authScreen) authScreen.style.display = isLoggedIn ? 'none' : '';
   if (appShell) appShell.style.display = isLoggedIn ? '' : 'none';
 
-  if (isLoggedIn) {
-    fillCurrentUser();
-  }
+  if (isLoggedIn) fillCurrentUser();
 }
 
 function fillCurrentUser() {
@@ -288,9 +363,7 @@ function switchScreen(screen) {
     if (!section.id) return;
     const isTarget = section.id === screen;
 
-    if (
-      ['dashboard', 'tenants', 'managers', 'properties', 'configs', 'launches', 'payments', 'reports'].includes(section.id)
-    ) {
+    if (['dashboard', 'tenants', 'managers', 'properties', 'configs', 'launches', 'payments', 'reports'].includes(section.id)) {
       section.style.display = isTarget ? '' : 'none';
       section.classList.toggle('active', isTarget);
     }
@@ -303,13 +376,7 @@ function switchScreen(screen) {
 }
 
 function fillMonthDefaults() {
-  const monthFields = [
-    'dashboardMonth',
-    'launchMonth',
-    'reportMonth',
-    'paymentMonthFilter',
-    'paymentCompetenceFilter'
-  ];
+  const monthFields = ['dashboardMonth', 'launchMonth', 'reportMonth', 'paymentMonthFilter', 'paymentCompetenceFilter'];
 
   monthFields.forEach((id) => {
     const field = byId(id);
@@ -1086,7 +1153,16 @@ async function loadDashboard() {
   const managerId = byId('dashboardManagerFilter')?.value || '';
   const params = new URLSearchParams({ month });
   if (managerId) params.set('manager_id', managerId);
-  cache.dashboard = await api(`/api/dashboard?${params.toString()}`);
+
+  const result = await api(`/api/dashboard?${params.toString()}`);
+  const items = normalizeArray(result?.items || []);
+  const summary = computeDashboardSummary(items);
+
+  cache.dashboard = {
+    summary: normalizeRecord(summary),
+    items
+  };
+
   renderDashboard();
 }
 
@@ -1100,12 +1176,12 @@ async function loadReferenceLists() {
     api('/api/receiving-accounts')
   ]);
 
-  cache.tenants = Array.isArray(tenants) ? tenants : [];
-  cache.managers = Array.isArray(managers) ? managers : [];
-  cache.properties = Array.isArray(properties) ? properties : [];
-  cache.configs = Array.isArray(configs) ? configs : [];
-  cache.methods = Array.isArray(methods) ? methods : [];
-  cache.accounts = Array.isArray(accounts) ? accounts : [];
+  cache.tenants = normalizeArray(tenants);
+  cache.managers = normalizeArray(managers);
+  cache.properties = normalizeArray(properties);
+  cache.configs = normalizeArray(configs);
+  cache.methods = normalizeArray(methods);
+  cache.accounts = normalizeArray(accounts);
 
   renderTenants();
   renderManagers();
@@ -1118,14 +1194,14 @@ async function loadLaunches() {
   const month = byId('launchMonth')?.value || currentMonth();
   const params = new URLSearchParams({ month });
   const items = await api(`/api/launches?${params.toString()}`);
-  cache.launches = Array.isArray(items) ? items : [];
+  cache.launches = normalizeArray(items);
   renderLaunches();
   refreshAllSelects();
 }
 
 async function loadPayments() {
   const items = await api('/api/payments');
-  cache.payments = Array.isArray(items) ? items : [];
+  cache.payments = normalizeArray(items);
   renderPayments();
 }
 
@@ -1137,7 +1213,7 @@ async function loadReport() {
 
   try {
     const result = await api(`/api/reports/monthly?${params.toString()}`);
-    cache.reportRows = Array.isArray(result?.rows) ? result.rows : [];
+    cache.reportRows = normalizeArray(result?.rows || []);
   } catch (_) {
     cache.reportRows = [];
   }
@@ -1348,13 +1424,13 @@ async function submitNewLookup(kind, name) {
   });
 
   if (kind === 'method') {
-    cache.methods.push(result);
+    cache.methods.push(normalizeRecord(result));
   } else {
-    cache.accounts.push(result);
+    cache.accounts.push(normalizeRecord(result));
   }
 
   refreshAllSelects();
-  return result;
+  return normalizeRecord(result);
 }
 
 async function handleAuthLogin(event) {
@@ -1563,9 +1639,7 @@ async function handleBackupImport(file) {
   const text = await file.text();
   const parsed = JSON.parse(text);
 
-  const ok = window.confirm(
-    'A restauração vai substituir os dados atuais da sua conta.\n\nDeseja continuar?'
-  );
+  const ok = window.confirm('A restauração vai substituir os dados atuais da sua conta.\n\nDeseja continuar?');
   if (!ok) return;
 
   const result = await api('/api/backup/import', {
@@ -1721,7 +1795,6 @@ function bindDelegatedActions() {
           if (item) fillTenantForm(item);
           break;
         }
-
         case 'tenant-delete':
           await handleDelete(`/api/tenants/${id}`, 'este inquilino');
           break;
@@ -1731,7 +1804,6 @@ function bindDelegatedActions() {
           if (item) fillManagerForm(item);
           break;
         }
-
         case 'manager-delete':
           await handleDelete(`/api/managers/${id}`, 'esta administradora');
           break;
@@ -1741,7 +1813,6 @@ function bindDelegatedActions() {
           if (item) fillPropertyForm(item);
           break;
         }
-
         case 'property-delete':
           await handleDelete(`/api/properties/${id}`, 'este imóvel');
           break;
@@ -1751,77 +1822,4 @@ function bindDelegatedActions() {
           if (item) fillConfigForm(item);
           break;
         }
-
-        case 'config-delete':
-          await handleDelete(`/api/category-configs/${id}`, 'esta categoria');
-          break;
-
-        case 'launch-edit':
-          await editLaunch(id);
-          break;
-
-        case 'launch-delete':
-          await handleDelete(`/api/launches/${id}`, 'este lançamento');
-          break;
-
-        case 'payment-edit': {
-          const item = findPaymentById(id);
-          if (item) fillPaymentForm(item);
-          break;
-        }
-
-        case 'payment-delete':
-          await handleDelete(`/api/payments/${id}`, 'este pagamento');
-          break;
-
-        case 'payment-receipt': {
-          const item = findPaymentById(id);
-          if (item?.receipt_file_path) {
-            window.open(item.receipt_file_path, '_blank', 'noopener');
-          }
-          break;
-        }
-
-        default:
-          break;
-      }
-    };
-
-    run().catch((error) => {
-      alert(error.message || 'Erro ao executar ação.');
-    });
-  });
-}
-
-async function bootFromSession() {
-  const token = getToken();
-
-  if (!token) {
-    showApp(false);
-    switchTab('login');
-    return;
-  }
-
-  try {
-    showApp(true);
-    await refreshAll();
-    switchScreen('dashboard');
-  } catch (error) {
-    clearSession();
-    showApp(false);
-    switchTab('login');
-    console.error(error);
-  }
-}
-
-function init() {
-  fillMonthDefaults();
-  bindStaticEvents();
-  bindDelegatedActions();
-  bootFromSession().catch((error) => {
-    console.error(error);
-    showApp(false);
-  });
-}
-
-document.addEventListener('DOMContentLoaded', init);
+        case 'config
