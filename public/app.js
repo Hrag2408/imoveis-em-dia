@@ -1822,4 +1822,88 @@ function bindDelegatedActions() {
           if (item) fillConfigForm(item);
           break;
         }
-        case 'config
+        case 'config-delete':
+          await handleDelete(`/api/category-configs/${id}`, 'esta categoria');
+          break;
+
+        case 'launch-edit': {
+          const item = findLaunchById(id);
+          if (item) {
+            switchScreen('payments');
+            const launchSelect = byId('paymentLaunchSelect');
+            if (launchSelect) {
+              launchSelect.value = String(item.id);
+              syncPaymentPreview();
+            }
+            byId('paymentDate')?.focus();
+          }
+          break;
+        }
+        case 'launch-delete':
+          await handleDelete(`/api/launches/${id}`, 'este lançamento');
+          break;
+
+        case 'payment-edit': {
+          const item = findPaymentById(id);
+          if (item) fillPaymentForm(item);
+          break;
+        }
+        case 'payment-delete':
+          await handleDelete(`/api/payments/${id}`, 'este pagamento');
+          break;
+
+        case 'payment-receipt': {
+          const item = findPaymentById(id);
+          if (item?.receipt_file_path) {
+            window.open(item.receipt_file_path, '_blank', 'noopener');
+          } else {
+            alert('Este pagamento não possui recibo anexado.');
+          }
+          break;
+        }
+
+        default:
+          break;
+      }
+    };
+
+    run().catch((error) => {
+      console.error(error);
+      alert(error.message || 'Erro ao executar ação.');
+    });
+  });
+}
+
+async function bootFromSession() {
+  fillMonthDefaults();
+  bindStaticEvents();
+  bindDelegatedActions();
+
+  const token = getToken();
+  if (!token) {
+    showApp(false);
+    switchTab('login');
+    return;
+  }
+
+  try {
+    showApp(true);
+    await refreshAll();
+    switchScreen('dashboard');
+  } catch (error) {
+    console.error(error);
+    clearSession();
+    showApp(false);
+    switchTab('login');
+    setAuthMessage(error.message || 'Sua sessão expirou. Faça login novamente.');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  bootFromSession().catch((error) => {
+    console.error(error);
+    showApp(false);
+    switchTab('login');
+    setAuthMessage(error.message || 'Erro ao iniciar aplicação.');
+  });
+});
