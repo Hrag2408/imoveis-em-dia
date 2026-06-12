@@ -42,8 +42,18 @@ function parseId(value) {
 
 function toNumber(value, fallback = 0) {
   if (value === null || value === undefined || value === '') return fallback;
-  const normalized = String(value).replace(/\./g, '').replace(',', '.');
-  const num = Number(normalized);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+
+  const str = String(value).trim();
+  if (!str) return fallback;
+
+  if (str.includes(',')) {
+    const normalized = str.replace(/\./g, '').replace(',', '.');
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : fallback;
+  }
+
+  const num = Number(str);
   return Number.isFinite(num) ? num : fallback;
 }
 
