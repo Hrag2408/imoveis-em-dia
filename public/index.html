@@ -154,6 +154,16 @@
               <input type="email" id="tenantEmail" name="email" />
             </div>
 
+            <div class="field">
+              <label for="tenantRentalStart">Início do período do aluguel</label>
+              <input type="text" id="tenantRentalStart" name="rental_period_start_br" placeholder="01/04/2026" />
+            </div>
+
+            <div class="field">
+              <label for="tenantRentalEnd">Fim do período do aluguel</label>
+              <input type="text" id="tenantRentalEnd" name="rental_period_end_br" placeholder="30/04/2026" />
+            </div>
+
             <div class="field field-full">
               <label for="tenantNotes">Observações</label>
               <textarea id="tenantNotes" name="notes" rows="3"></textarea>
@@ -551,6 +561,8 @@
               <option value="all">Todos</option>
               <option value="payments">Pagamentos</option>
               <option value="due">Vencimentos</option>
+              <option value="late">Atrasados</option>
+              <option value="open">Em aberto</option>
             </select>
           </div>
 
@@ -571,5 +583,6 @@
   </div>
 
   <script src="/app.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
