@@ -1243,13 +1243,15 @@ async function loadPayments() {
 }
 
 async function loadReport() {
-  const reportMonth = byId('reportMonth')?.value || byId('dashboardMonth')?.value || currentMonth();
+  const reportMonth = byId('reportMonth')?.value || '';
   const managerId = byId('reportManagerFilter')?.value || '';
-  const params = new URLSearchParams({ month: reportMonth });
+  const params = new URLSearchParams();
+  if (reportMonth) params.set('month', reportMonth);
   if (managerId) params.set('manager_id', managerId);
 
   try {
-    const result = await api(`/api/reports/monthly?${params.toString()}`);
+    const query = params.toString();
+    const result = await api(`/api/reports/monthly${query ? `?${query}` : ''}`);
     cache.reportRows = normalizeArray(result?.rows || []);
   } catch (_) {
     cache.reportRows = [];
