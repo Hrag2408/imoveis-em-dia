@@ -107,6 +107,51 @@ function buildDueDate(competenceMonth, dueDay) {
   return `${year}-${String(monthNum).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 }
 
+function previousMonth(month) {
+  const [year, monthNum] = String(month).split('-').map(Number);
+  const dt = new Date(year, monthNum - 2, 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function buildDateInMonth(month, day) {
+  const [year, monthNum] = String(month).split('-').map(Number);
+  const last = new Date(year, monthNum, 0).getDate();
+  const safeDay = Math.min(Math.max(Number(day || 1), 1), last);
+  return `${year}-${String(monthNum).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+}
+
+function buildCompetenceRange(month, tenantStart, tenantEnd) {
+  if (!tenantStart || !tenantEnd) {
+    return {
+      competence_start: firstDayOfMonth(month),
+      competence_end: lastDayOfMonth(month)
+    };
+  }
+
+  const startDay = Number(String(tenantStart).slice(8, 10));
+  const endDay = Number(String(tenantEnd).slice(8, 10));
+
+  if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
+    return {
+      competence_start: firstDayOfMonth(month),
+      competence_end: lastDayOfMonth(month)
+    };
+  }
+
+  if (startDay <= endDay) {
+    return {
+      competence_start: buildDateInMonth(month, startDay),
+      competence_end: buildDateInMonth(month, endDay)
+    };
+  }
+
+  const prev = previousMonth(month);
+  return {
+    competence_start: buildDateInMonth(prev, startDay),
+    competence_end: buildDateInMonth(month, endDay)
+  };
+}
+
 function normalizePeriod(month, start, end) {
   const competence = month || String(start || '').slice(0, 7);
   const competenceStart = start || firstDayOfMonth(competence);
@@ -284,13 +329,15 @@ router.post('/tenants', async (req, res, next) => {
     if (requireFields(res, ['name'], req.body)) return;
 
     const result = await run(
-      'INSERT INTO tenants (user_id, name, phone, email, notes) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO tenants (user_id, name, phone, email, notes, rental_period_start, rental_period_end) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.id,
         String(req.body.name).trim(),
         req.body.phone || null,
         req.body.email || null,
-        req.body.notes || null
+        req.body.notes || null,
+        req.body.rental_period_start || null,
+        req.body.rental_period_end || null
       ]
     );
 
@@ -309,12 +356,14 @@ router.put('/tenants/:id', async (req, res, next) => {
     if (requireFields(res, ['name'], req.body)) return;
 
     await run(
-      'UPDATE tenants SET name=?, phone=?, email=?, notes=? WHERE id=? AND user_id=?',
+      'UPDATE tenants SET name=?, phone=?, email=?, notes=?, rental_period_start=?, rental_period_end=? WHERE id=? AND user_id=?',
       [
         String(req.body.name).trim(),
         req.body.phone || null,
         req.body.email || null,
         req.body.notes || null,
+        req.body.rental_period_start || null,
+        req.body.rental_period_end || null,
         id,
         req.user.id
       ]
@@ -872,9 +921,12 @@ router.post('/launches/generate', async (req, res, next) => {
       `
       SELECT
         c.*,
-        p.name AS property_name
+        p.name AS property_name,
+        t.rental_period_start AS tenant_rental_period_start,
+        t.rental_period_end AS tenant_rental_period_end
       FROM category_configs c
       JOIN properties p ON p.id = c.property_id
+      LEFT JOIN tenants t ON t.id = p.tenant_id
       WHERE c.user_id=? AND c.active=1
       ORDER BY p.name, c.category_name, c.id
       `,
@@ -894,6 +946,11 @@ router.post('/launches/generate', async (req, res, next) => {
       if (existing) continue;
 
       const due_date = buildDueDate(month, config.due_day);
+      const range = buildCompetenceRange(
+        month,
+        config.tenant_rental_period_start,
+        config.tenant_rental_period_end
+      );
 
       const result = await run(
         `
@@ -907,8 +964,8 @@ router.post('/launches/generate', async (req, res, next) => {
           config.id,
           config.category_name,
           month,
-          competence_start,
-          competence_end,
+          range.competence_start,
+          range.competence_end,
           round2(toNumber(config.amount)),
           due_date,
           null,
