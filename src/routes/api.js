@@ -1497,10 +1497,6 @@ router.get('/reports/monthly', async (req, res, next) => {
     const month = String(req.query.month || '').trim();
     const managerId = parseId(req.query.manager_id);
 
-    if (!month) {
-      return res.status(400).json({ error: 'month é obrigatório.' });
-    }
-
     let sql = `
       SELECT
         l.id AS launch_id,
@@ -1531,17 +1527,22 @@ router.get('/reports/monthly', async (req, res, next) => {
       JOIN properties p ON p.id = l.property_id
       LEFT JOIN managers m ON m.id = p.manager_id
       LEFT JOIN payments pay ON pay.launch_id = l.id
-      WHERE l.user_id = ? AND l.competence = ?
+      WHERE l.user_id = ?
     `;
 
-    const params = [req.user.id, month];
+    const params = [req.user.id];
+
+    if (month) {
+      sql += ' AND l.competence = ?';
+      params.push(month);
+    }
 
     if (managerId) {
       sql += ' AND p.manager_id = ?';
       params.push(managerId);
     }
 
-    sql += ' ORDER BY m.name NULLS LAST, p.name, l.category_name, l.due_date';
+    sql += ' ORDER BY l.due_date, m.name NULLS LAST, p.name, l.category_name';
 
     const rows = await all(sql, params);
 
@@ -1561,7 +1562,7 @@ router.get('/reports/monthly', async (req, res, next) => {
     totals.admin_fee = round2(totals.admin_fee);
     totals.net_received = round2(totals.net_received);
 
-    res.json({ month, totals, rows });
+    res.json({ month: month || null, totals, rows });
   } catch (error) {
     next(error);
   }
