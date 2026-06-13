@@ -1827,16 +1827,7 @@ function bindDelegatedActions() {
           break;
 
         case 'launch-edit': {
-          const item = findLaunchById(id);
-          if (item) {
-            switchScreen('payments');
-            const launchSelect = byId('paymentLaunchSelect');
-            if (launchSelect) {
-              launchSelect.value = String(item.id);
-              syncPaymentPreview();
-            }
-            byId('paymentDate')?.focus();
-          }
+          await editLaunch(id);
           break;
         }
         case 'launch-delete':
