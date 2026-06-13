@@ -111,6 +111,21 @@ function dateBR(value) {
   return String(value);
 }
 
+function brDateToIso(value) {
+  const str = String(value || '').trim();
+  if (!str) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return '';
+  const [, dd, mm, yyyy] = match;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function isoToBrInput(value) {
+  const normalized = normalizeDateOnly(value);
+  return normalized ? dateBR(normalized) : '';
+}
+
 function monthBR(value) {
   if (!value) return '—';
   const [year, month] = String(value).split('-').map(Number);
@@ -605,6 +620,7 @@ function renderTenants() {
       </div>
       <p><strong>Telefone:</strong> ${escapeHtml(item.phone || '—')}</p>
       <p><strong>E-mail:</strong> ${escapeHtml(item.email || '—')}</p>
+      <p><strong>Período padrão do aluguel:</strong> ${escapeHtml(formatPeriod(item.rental_period_start, item.rental_period_end))}</p>
       <p><strong>Observações:</strong> ${escapeHtml(item.notes || '—')}</p>
     </article>
   `).join('');
@@ -855,21 +871,21 @@ function renderPayments() {
   `;
 }
 
-function renderMonthlyReport() {
-  const container = byId('reportList') || byId('reportTable') || byId('reportContainer');
-  if (!container) return;
-
+function getFilteredReportRows() {
   const propertyFilter = byId('reportPropertyFilter')?.value || '';
   const managerFilter = byId('reportManagerFilter')?.value || '';
   const categoryFilter = byId('reportCategoryFilter')?.value || '';
   const typeFilter = byId('reportTypeFilter')?.value || 'all';
 
-  const rows = cache.reportRows.filter((row) => {
+  return (cache.reportRows || []).filter((row) => {
     const paid = !!row.payment_date || toNumber(row.received_amount) > 0;
+    const status = statusFromItem(row);
     const includeType =
       typeFilter === 'all' ||
       (typeFilter === 'payments' && paid) ||
-      (typeFilter === 'due' && !paid);
+      (typeFilter === 'due' && !paid) ||
+      (typeFilter === 'late' && status === 'Atrasado') ||
+      (typeFilter === 'open' && status === 'Em aberto');
 
     const includeProperty = !propertyFilter || String(row.property_id) === String(propertyFilter);
     const includeManager = !managerFilter || String(row.manager_id) === String(managerFilter);
@@ -877,6 +893,25 @@ function renderMonthlyReport() {
 
     return includeType && includeProperty && includeManager && includeCategory;
   });
+}
+
+function getReportTitle() {
+  const typeFilter = byId('reportTypeFilter')?.value || 'all';
+  const titles = {
+    all: 'Relatório mensal',
+    payments: 'Relatório de pagamentos',
+    due: 'Relatório de vencimentos',
+    late: 'Relatório de atrasados',
+    open: 'Relatório em aberto'
+  };
+  return titles[typeFilter] || 'Relatório mensal';
+}
+
+function renderMonthlyReport() {
+  const container = byId('reportList') || byId('reportTable') || byId('reportContainer');
+  if (!container) return;
+
+  const rows = getFilteredReportRows();
 
   const totals = rows.reduce(
     (acc, row) => {
@@ -998,6 +1033,8 @@ function fillTenantForm(item) {
   formField(form, 'name').value = item.name || '';
   formField(form, 'phone').value = item.phone || '';
   formField(form, 'email').value = item.email || '';
+  formField(form, 'rental_period_start_br', 'tenantRentalStart').value = isoToBrInput(item.rental_period_start || '');
+  formField(form, 'rental_period_end_br', 'tenantRentalEnd').value = isoToBrInput(item.rental_period_end || '');
   formField(form, 'notes').value = item.notes || '';
   switchScreen('tenants');
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1319,7 +1356,7 @@ function buildImportSummary(counts = {}) {
 }
 
 function exportReportCsv() {
-  const rows = cache.reportRows || [];
+  const rows = getFilteredReportRows();
   if (!rows.length) {
     alert('Não há dados para exportar.');
     return;
@@ -1363,7 +1400,8 @@ function exportReportCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `relatorio-mensal-${byId('reportMonth')?.value || currentMonth()}.csv`;
+  const reportType = byId('reportTypeFilter')?.value || 'all';
+  link.download = `relatorio-${reportType}-${byId('reportMonth')?.value || currentMonth()}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1386,7 +1424,7 @@ function printReport() {
   win.document.write(`
     <html>
       <head>
-        <title>Relatório mensal</title>
+        <title>${getReportTitle()}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
           h1 { margin-bottom: 16px; }
@@ -1402,7 +1440,7 @@ function printReport() {
         </style>
       </head>
       <body>
-        <h1>Relatório mensal</h1>
+        <h1>${getReportTitle()}</h1>
         ${area.innerHTML}
       </body>
     </html>
@@ -1484,10 +1522,25 @@ async function handleTenantSubmit(event) {
   const form = event.currentTarget;
   const id = formField(form, 'id')?.value;
 
+  const rentalPeriodStart = brDateToIso(formField(form, 'rental_period_start_br', 'tenantRentalStart')?.value || '');
+  const rentalPeriodEnd = brDateToIso(formField(form, 'rental_period_end_br', 'tenantRentalEnd')?.value || '');
+
+  if ((formField(form, 'rental_period_start_br', 'tenantRentalStart')?.value || '').trim() && !rentalPeriodStart) {
+    alert('Informe o início do período do aluguel no formato DD/MM/AAAA.');
+    return;
+  }
+
+  if ((formField(form, 'rental_period_end_br', 'tenantRentalEnd')?.value || '').trim() && !rentalPeriodEnd) {
+    alert('Informe o fim do período do aluguel no formato DD/MM/AAAA.');
+    return;
+  }
+
   const payload = {
     name: formField(form, 'name')?.value?.trim(),
     phone: formField(form, 'phone')?.value?.trim() || null,
     email: formField(form, 'email')?.value?.trim() || null,
+    rental_period_start: rentalPeriodStart || null,
+    rental_period_end: rentalPeriodEnd || null,
     notes: formField(form, 'notes')?.value?.trim() || null
   };
 
