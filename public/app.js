@@ -1131,7 +1131,7 @@ async function editLaunch(id) {
     property_id: Number(propertyId) || null,
     config_id: configId ? Number(configId) : null,
     category_name: categoryName.trim(),
-    competence: monthFromDate(competenceStart),
+    competence: item.competence || monthFromDate(competenceEnd) || monthFromDate(competenceStart),
     competence_start: competenceStart,
     competence_end: competenceEnd,
     due_date: dueDate,
