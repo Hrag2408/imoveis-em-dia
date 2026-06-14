@@ -355,6 +355,9 @@ router.put('/tenants/:id', async (req, res, next) => {
     if (!current) return;
     if (requireFields(res, ['name'], req.body)) return;
 
+    const rentalPeriodStart = req.body.rental_period_start || null;
+    const rentalPeriodEnd = req.body.rental_period_end || null;
+
     await run(
       'UPDATE tenants SET name=?, phone=?, email=?, notes=?, rental_period_start=?, rental_period_end=? WHERE id=? AND user_id=?',
       [
@@ -362,12 +365,36 @@ router.put('/tenants/:id', async (req, res, next) => {
         req.body.phone || null,
         req.body.email || null,
         req.body.notes || null,
-        req.body.rental_period_start || null,
-        req.body.rental_period_end || null,
+        rentalPeriodStart,
+        rentalPeriodEnd,
         id,
         req.user.id
       ]
     );
+
+    const linkedLaunches = await all(
+      `
+      SELECT l.id, l.competence
+      FROM launches l
+      JOIN properties p ON p.id = l.property_id
+      WHERE l.user_id=? AND p.user_id=? AND p.tenant_id=?
+      `,
+      [req.user.id, req.user.id, id]
+    );
+
+    for (const launch of linkedLaunches) {
+      const range = buildCompetenceRange(launch.competence, rentalPeriodStart, rentalPeriodEnd);
+
+      await run(
+        'UPDATE launches SET competence_start=?, competence_end=? WHERE id=? AND user_id=?',
+        [range.competence_start, range.competence_end, launch.id, req.user.id]
+      );
+
+      await run(
+        'UPDATE payments SET rental_period_start=?, rental_period_end=? WHERE launch_id=? AND user_id=?',
+        [range.competence_start, range.competence_end, launch.id, req.user.id]
+      );
+    }
 
     const row = await get('SELECT * FROM tenants WHERE id=?', [id]);
     res.json(row);
