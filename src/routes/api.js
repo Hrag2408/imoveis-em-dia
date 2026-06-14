@@ -120,7 +120,27 @@ function buildDateInMonth(month, day) {
   return `${year}-${String(monthNum).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 }
 
-function buildCompetenceRange(month, tenantStart, tenantEnd) {
+function monthDiff(fromMonth, toMonth) {
+  const [fromYear, fromMonthNum] = String(fromMonth || '').split('-').map(Number);
+  const [toYear, toMonthNum] = String(toMonth || '').split('-').map(Number);
+  if (!fromYear || !fromMonthNum || !toYear || !toMonthNum) return 0;
+  return (toYear - fromYear) * 12 + (toMonthNum - fromMonthNum);
+}
+
+function shiftDateByMonths(dateValue, monthsToAdd) {
+  const base = String(dateValue || '').slice(0, 10);
+  const [year, monthNum, day] = base.split('-').map(Number);
+  if (!year || !monthNum || !day) return null;
+
+  const target = new Date(year, monthNum - 1 + Number(monthsToAdd || 0), 1);
+  const targetYear = target.getFullYear();
+  const targetMonth = target.getMonth() + 1;
+  const last = new Date(targetYear, targetMonth, 0).getDate();
+  const safeDay = Math.min(day, last);
+  return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+}
+
+function buildCompetenceRange(month, tenantStart, tenantEnd, firstCompetenceMonth) {
   if (!tenantStart || !tenantEnd) {
     return {
       competence_start: firstDayOfMonth(month),
@@ -329,7 +349,7 @@ router.post('/tenants', async (req, res, next) => {
     if (requireFields(res, ['name'], req.body)) return;
 
     const result = await run(
-      'INSERT INTO tenants (user_id, name, phone, email, notes, rental_period_start, rental_period_end) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO tenants (user_id, name, phone, email, notes, rental_period_start, rental_period_end, first_competence_month) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         req.user.id,
         String(req.body.name).trim(),
@@ -337,7 +357,8 @@ router.post('/tenants', async (req, res, next) => {
         req.body.email || null,
         req.body.notes || null,
         req.body.rental_period_start || null,
-        req.body.rental_period_end || null
+        req.body.rental_period_end || null,
+        req.body.first_competence_month || null
       ]
     );
 
@@ -357,9 +378,10 @@ router.put('/tenants/:id', async (req, res, next) => {
 
     const rentalPeriodStart = req.body.rental_period_start || null;
     const rentalPeriodEnd = req.body.rental_period_end || null;
+    const firstCompetenceMonth = req.body.first_competence_month || null;
 
     await run(
-      'UPDATE tenants SET name=?, phone=?, email=?, notes=?, rental_period_start=?, rental_period_end=? WHERE id=? AND user_id=?',
+      'UPDATE tenants SET name=?, phone=?, email=?, notes=?, rental_period_start=?, rental_period_end=?, first_competence_month=? WHERE id=? AND user_id=?',
       [
         String(req.body.name).trim(),
         req.body.phone || null,
@@ -367,6 +389,7 @@ router.put('/tenants/:id', async (req, res, next) => {
         req.body.notes || null,
         rentalPeriodStart,
         rentalPeriodEnd,
+        firstCompetenceMonth,
         id,
         req.user.id
       ]
@@ -383,7 +406,7 @@ router.put('/tenants/:id', async (req, res, next) => {
     );
 
     for (const launch of linkedLaunches) {
-      const range = buildCompetenceRange(launch.competence, rentalPeriodStart, rentalPeriodEnd);
+      const range = buildCompetenceRange(launch.competence, rentalPeriodStart, rentalPeriodEnd, firstCompetenceMonth);
 
       await run(
         'UPDATE launches SET competence_start=?, competence_end=? WHERE id=? AND user_id=?',
@@ -950,7 +973,8 @@ router.post('/launches/generate', async (req, res, next) => {
         c.*,
         p.name AS property_name,
         t.rental_period_start AS tenant_rental_period_start,
-        t.rental_period_end AS tenant_rental_period_end
+        t.rental_period_end AS tenant_rental_period_end,
+        t.first_competence_month AS tenant_first_competence_month
       FROM category_configs c
       JOIN properties p ON p.id = c.property_id
       LEFT JOIN tenants t ON t.id = p.tenant_id
@@ -976,7 +1000,8 @@ router.post('/launches/generate', async (req, res, next) => {
       const range = buildCompetenceRange(
         month,
         config.tenant_rental_period_start,
-        config.tenant_rental_period_end
+        config.tenant_rental_period_end,
+        config.tenant_first_competence_month
       );
 
       const result = await run(
@@ -1362,8 +1387,8 @@ router.post('/backup/import', async (req, res, next) => {
 
     for (const row of tenants) {
       const result = await client.query(
-        'INSERT INTO tenants (user_id, name, phone, email, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-        [req.user.id, row.name, row.phone || null, row.email || null, row.notes || null]
+        'INSERT INTO tenants (user_id, name, phone, email, notes, rental_period_start, rental_period_end, first_competence_month) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+        [req.user.id, row.name, row.phone || null, row.email || null, row.notes || null, row.rental_period_start || null, row.rental_period_end || null, row.first_competence_month || null]
       );
       tenantMap.set(String(row.id), result.rows[0].id);
     }
