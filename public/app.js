@@ -621,6 +621,7 @@ function renderTenants() {
       <p><strong>Telefone:</strong> ${escapeHtml(item.phone || '—')}</p>
       <p><strong>E-mail:</strong> ${escapeHtml(item.email || '—')}</p>
       <p><strong>Período padrão do aluguel:</strong> ${escapeHtml(formatPeriod(item.rental_period_start, item.rental_period_end))}</p>
+      <p><strong>Competência do primeiro período:</strong> ${escapeHtml(monthBR(item.first_competence_month || monthFromDate(item.rental_period_start || '')))}</p>
       <p><strong>Observações:</strong> ${escapeHtml(item.notes || '—')}</p>
     </article>
   `).join('');
@@ -1035,6 +1036,7 @@ function fillTenantForm(item) {
   formField(form, 'email').value = item.email || '';
   formField(form, 'rental_period_start_br', 'tenantRentalStart').value = isoToBrInput(item.rental_period_start || '');
   formField(form, 'rental_period_end_br', 'tenantRentalEnd').value = isoToBrInput(item.rental_period_end || '');
+  formField(form, 'first_competence_month', 'tenantFirstCompetence').value = item.first_competence_month || monthFromDate(item.rental_period_start || '');
   formField(form, 'notes').value = item.notes || '';
   switchScreen('tenants');
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1526,6 +1528,7 @@ async function handleTenantSubmit(event) {
 
   const rentalPeriodStart = brDateToIso(formField(form, 'rental_period_start_br', 'tenantRentalStart')?.value || '');
   const rentalPeriodEnd = brDateToIso(formField(form, 'rental_period_end_br', 'tenantRentalEnd')?.value || '');
+  const firstCompetenceMonth = formField(form, 'first_competence_month', 'tenantFirstCompetence')?.value || monthFromDate(rentalPeriodStart || '');
 
   if ((formField(form, 'rental_period_start_br', 'tenantRentalStart')?.value || '').trim() && !rentalPeriodStart) {
     alert('Informe o início do período do aluguel no formato DD/MM/AAAA.');
@@ -1543,6 +1546,7 @@ async function handleTenantSubmit(event) {
     email: formField(form, 'email')?.value?.trim() || null,
     rental_period_start: rentalPeriodStart || null,
     rental_period_end: rentalPeriodEnd || null,
+    first_competence_month: firstCompetenceMonth || null,
     notes: formField(form, 'notes')?.value?.trim() || null
   };
 
