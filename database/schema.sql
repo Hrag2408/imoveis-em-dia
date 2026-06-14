@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   notes TEXT,
   rental_period_start DATE,
   rental_period_end DATE,
+  first_competence_month CHAR(7),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -109,6 +110,7 @@ CREATE TABLE IF NOT EXISTS payments (
 
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS rental_period_start DATE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS rental_period_end DATE;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS first_competence_month CHAR(7);
 
 CREATE INDEX IF NOT EXISTS idx_tenants_user_id ON tenants(user_id);
 CREATE INDEX IF NOT EXISTS idx_managers_user_id ON managers(user_id);
